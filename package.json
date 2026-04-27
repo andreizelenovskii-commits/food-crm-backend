@@ -1,0 +1,25 @@
+{
+  "name": "food-crm-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx watch --tsconfig tsconfig.json src/server.ts",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "start": "tsx --tsconfig tsconfig.json src/server.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.1.0",
+    "@types/pg": "^8.20.0",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.6.1",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
