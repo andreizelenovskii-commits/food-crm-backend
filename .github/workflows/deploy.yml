@@ -1,0 +1,77 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_DIR: /home/deploy/apps/food-crm-backend
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        run: |
+          set -euo pipefail
+          RELEASE_DIR="$APP_DIR/releases/$GITHUB_SHA"
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "mkdir -p '$RELEASE_DIR'"
+          tar \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='dist' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            -czf - . | "${SSH[@]}" "tar -xzf - -C '$RELEASE_DIR'"
+
+      - name: Migrate and activate release
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "APP_DIR='$APP_DIR' RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          test -f "$APP_DIR/shared/.env"
+          ln -sfn "$APP_DIR/shared/.env" "$RELEASE_DIR/.env"
+          cd "$RELEASE_DIR"
+          npm ci
+          npm run db:deploy
+          ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
+          cd "$APP_DIR/current"
+          pm2 startOrReload ecosystem.config.cjs --only food-crm-backend --update-env
+          pm2 save
+          find "$APP_DIR/releases" -mindepth 1 -maxdepth 1 -type d | sort | head -n -5 | xargs -r rm -rf
+          REMOTE

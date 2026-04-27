@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrderStatus {
+  SENT_TO_KITCHEN
+  READY
+  PACKED
+  DELIVERED_PAID
+  CANCELLED
+}
+
+enum ClientType {
+  CLIENT
+  ORGANIZATION
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      String   @default("admin")
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      ClientType @default(CLIENT)
+  email     String?
+  phone     String   @unique
+  birthDate DateTime?
+  address   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  sku         String?  @unique
+  category    String?
+  unit        String
+  stockQuantity Float  @default(0)
+  priceCents  Int
+  description String?
+  createdAt   DateTime @default(now())
+  orderItems  OrderItem[]
+  ingredients TechCardIngredient[]
+  inventoryItems InventorySessionItem[]
+  incomingItems IncomingActItem[]
+  writeoffItems WriteoffActItem[]
+}
+
+model Employee {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String?  @unique
+  role         String
+  phone        String?
+  messenger    String?
+  schedule     Json?    // График работы, например { "monday": 8, "tuesday": 8, ... }
+  monthlyHours Int?     // Рассчитанные часы работы за месяц
+  birthDate    DateTime?
+  hireDate     DateTime?
+  createdAt    DateTime @default(now())
+  orders       Order[]
+  adjustments  EmployeeAdjustment[]
+  inventorySessions InventorySession[]
+  incomingActs IncomingAct[]
+  writeoffActs WriteoffAct[]
+}
+
+enum EmployeeAdjustmentType {
+  ADVANCE
+  FINE
+  DEBT
+}
+
+model EmployeeAdjustment {
+  id         Int                     @id @default(autoincrement())
+  employee   Employee                @relation(fields: [employeeId], references: [id])
+  employeeId Int
+  type       EmployeeAdjustmentType
+  amountCents Int
+  comment    String?
+  createdAt  DateTime                @default(now())
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  status      OrderStatus @default(SENT_TO_KITCHEN)
+  isInternal  Boolean     @default(false)
+  client      Client      @relation(fields: [clientId], references: [id])
+  clientId    Int
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  employeeId  Int
+  subtotalCents Int
+  discountPercent Int      @default(0)
+  totalCents  Int
+  createdAt   DateTime    @default(now())
+  items       OrderItem[]
+}
+
+model OrderItem {
+  id              Int     @id @default(autoincrement())
+  order           Order   @relation(fields: [orderId], references: [id])
+  orderId         Int
+  product         Product? @relation(fields: [productId], references: [id])
+  productId       Int?
+  catalogItem     CatalogItem? @relation(fields: [catalogItemId], references: [id])
+  catalogItemId   Int?
+  itemName        String
+  quantity        Int
+  unitPriceCents  Int
+  totalPriceCents Int
+}
+
+model TechnologicalCard {
+  id             Int                  @id @default(autoincrement())
+  name           String
+  category       String
+  pizzaSize      String?
+  outputQuantity Int
+  outputUnit     String
+  description    String?
+  createdAt      DateTime             @default(now())
+  ingredients    TechCardIngredient[]
+  catalogItems   CatalogItem[]
+}
+
+model TechCardIngredient {
+  id                  Int               @id @default(autoincrement())
+  technologicalCard   TechnologicalCard @relation(fields: [technologicalCardId], references: [id])
+  technologicalCardId Int
+  product             Product           @relation(fields: [productId], references: [id])
+  productId           Int
+  quantity            Float
+  unit                String
+}
+
+model CatalogItem {
+  id                  Int               @id @default(autoincrement())
+  name                String
+  slug                String            @unique
+  category            String?
+  description         String?
+  priceCents          Int
+  isPublished         Boolean           @default(false)
+  displayOrder        Int               @default(0)
+  createdAt           DateTime          @default(now())
+  technologicalCard   TechnologicalCard @relation(fields: [technologicalCardId], references: [id])
+  technologicalCardId Int
+  orderItems          OrderItem[]
+}
+
+model InventorySession {
+  id                    Int                    @id @default(autoincrement())
+  responsibleEmployee   Employee               @relation(fields: [responsibleEmployeeId], references: [id])
+  responsibleEmployeeId Int
+  notes                 String?
+  createdAt             DateTime               @default(now())
+  closedAt              DateTime?
+  items                 InventorySessionItem[]
+}
+
+model InventorySessionItem {
+  id                 Int              @id @default(autoincrement())
+  inventorySession   InventorySession @relation(fields: [inventorySessionId], references: [id])
+  inventorySessionId Int
+  product            Product          @relation(fields: [productId], references: [id])
+  productId          Int
+  productName        String
+  productCategory    String?
+  productUnit        String
+  stockQuantity      Float
+  actualQuantity     Float?
+}
+
+model IncomingAct {
+  id                    Int               @id @default(autoincrement())
+  responsibleEmployee   Employee          @relation(fields: [responsibleEmployeeId], references: [id])
+  responsibleEmployeeId Int
+  supplierName          String?
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  completedAt           DateTime?
+  items                 IncomingActItem[]
+}
+
+model IncomingActItem {
+  id                  Int         @id @default(autoincrement())
+  incomingAct         IncomingAct @relation(fields: [incomingActId], references: [id])
+  incomingActId       Int
+  product             Product     @relation(fields: [productId], references: [id])
+  productId           Int
+  productName         String
+  productCategory     String?
+  productUnit         String
+  quantity            Float
+  priceCents          Int
+  stockQuantityBefore Float?
+  stockQuantityAfter  Float?
+}
+
+model WriteoffAct {
+  id                    Int               @id @default(autoincrement())
+  responsibleEmployee   Employee          @relation(fields: [responsibleEmployeeId], references: [id])
+  responsibleEmployeeId Int
+  reason                String
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  completedAt           DateTime?
+  items                 WriteoffActItem[]
+}
+
+model WriteoffActItem {
+  id                  Int         @id @default(autoincrement())
+  writeoffAct         WriteoffAct @relation(fields: [writeoffActId], references: [id])
+  writeoffActId       Int
+  product             Product     @relation(fields: [productId], references: [id])
+  productId           Int
+  productName         String
+  productCategory     String?
+  productUnit         String
+  quantity            Float
+  priceCents          Int
+  stockQuantityBefore Float?
+  stockQuantityAfter  Float?
+}

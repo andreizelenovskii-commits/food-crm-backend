@@ -10,6 +10,7 @@ type BackendEnv = {
   databaseUrl: string;
   sessionSecret: string;
   sessionCookieName: string;
+  sessionCookieDomain: string | null;
   corsOrigins: string[];
 };
 
@@ -50,5 +51,6 @@ export const backendEnv: BackendEnv = {
   databaseUrl: getRequiredEnv("DATABASE_URL"),
   sessionSecret: getOptionalEnv("BACKEND_SESSION_SECRET") ?? getRequiredEnv("SESSION_SECRET"),
   sessionCookieName: getOptionalEnv("BACKEND_SESSION_COOKIE_NAME") ?? "food_crm_api_session",
+  sessionCookieDomain: getOptionalEnv("BACKEND_SESSION_COOKIE_DOMAIN"),
   corsOrigins: parseCorsOrigins(getOptionalEnv("BACKEND_CORS_ORIGIN")),
 };

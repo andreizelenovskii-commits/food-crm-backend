@@ -47,7 +47,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: "@backend/",
+      domain: backendEnv.sessionCookieDomain ?? undefined,
+      path: "/",
       maxAge: getSessionMaxAgeSeconds(),
     });
 
@@ -64,7 +65,10 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/v1/auth/logout", { preHandler: authenticateRequest }, async (_request, reply) => {
-    reply.clearCookie(backendEnv.sessionCookieName, { path: "@backend/" });
+    reply.clearCookie(backendEnv.sessionCookieName, {
+      domain: backendEnv.sessionCookieDomain ?? undefined,
+      path: "/",
+    });
     return { data: { success: true } };
   });
 
