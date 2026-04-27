@@ -17,7 +17,7 @@ jobs:
       APP_DIR: /home/deploy/apps/food-crm-backend
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_PORT: 22
 
     steps:
       - name: Checkout
