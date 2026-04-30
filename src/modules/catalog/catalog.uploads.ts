@@ -97,8 +97,12 @@ function parseMultipartFile(body: Buffer, contentType: string | undefined): Mult
   throw new ValidationError("Выберите фото товара для загрузки");
 }
 
-function buildPublicUrl(_request: FastifyRequest, filename: string) {
-  return `/uploads/catalog/${filename}`;
+function buildPublicUrl(request: FastifyRequest, filename: string) {
+  const forwardedProto = request.headers["x-forwarded-proto"];
+  const protocol = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+  const host = request.headers["x-forwarded-host"] ?? request.headers.host;
+
+  return `${protocol || "http"}://${host}/uploads/catalog/${filename}`;
 }
 
 export async function saveCatalogUpload(request: FastifyRequest) {
