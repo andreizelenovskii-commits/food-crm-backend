@@ -150,6 +150,7 @@ model CatalogItem {
   slug                String            @unique
   category            String?
   description         String?
+  imageUrl            String?
   priceCents          Int
   isPublished         Boolean           @default(false)
   displayOrder        Int               @default(0)

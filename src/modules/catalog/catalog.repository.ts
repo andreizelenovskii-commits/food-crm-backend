@@ -14,6 +14,7 @@ type CatalogRow = {
   category: string | null;
   pizzaSize: string | null;
   description: string | null;
+  imageUrl: string | null;
   priceCents: number;
   isPublished: boolean;
   createdAt: Date;
@@ -39,6 +40,28 @@ function mapPriceListType(isPublished: boolean): CatalogPriceListType {
   return isPublished ? "CLIENT" : "INTERNAL";
 }
 
+function normalizeCatalogImageUrl(imageUrl: string | null) {
+  if (!imageUrl) {
+    return null;
+  }
+
+  if (imageUrl.startsWith("/uploads/catalog/")) {
+    return imageUrl;
+  }
+
+  try {
+    const url = new URL(imageUrl);
+
+    if (url.pathname.startsWith("/uploads/catalog/")) {
+      return url.pathname;
+    }
+  } catch {
+    return imageUrl;
+  }
+
+  return imageUrl;
+}
+
 function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
   return {
     id: row.id,
@@ -47,6 +70,7 @@ function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
     category: row.category,
     pizzaSize: row.pizzaSize,
     description: row.description,
+    imageUrl: normalizeCatalogImageUrl(row.imageUrl),
     priceCents: row.priceCents,
     createdAt: row.createdAt.toISOString(),
     technologicalCardId: row.technologicalCardId,
@@ -64,6 +88,7 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
         c."category",
         t."pizzaSize",
         c."description",
+        c."imageUrl",
         c."priceCents",
         c."isPublished",
         c."createdAt",
@@ -88,6 +113,7 @@ export async function getCatalogItemById(id: number): Promise<CatalogItem | null
         c."category",
         t."pizzaSize",
         c."description",
+        c."imageUrl",
         c."priceCents",
         c."isPublished",
         c."createdAt",
@@ -156,30 +182,33 @@ export async function createCatalogItem(input: CatalogItemInput): Promise<Catalo
         "name",
         "slug",
         "category",
-        (SELECT "pizzaSize" FROM "TechnologicalCard" WHERE "id" = $7) AS "pizzaSize",
         "description",
+        "imageUrl",
         "priceCents",
         "isPublished",
         "technologicalCardId"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING
         "id",
         "name",
         "slug",
         "category",
+        (SELECT "pizzaSize" FROM "TechnologicalCard" WHERE "id" = $8) AS "pizzaSize",
         "description",
+        "imageUrl",
         "priceCents",
         "isPublished",
         "createdAt",
         "technologicalCardId",
-        (SELECT "name" FROM "TechnologicalCard" WHERE "id" = $7) AS "technologicalCardName"
+        (SELECT "name" FROM "TechnologicalCard" WHERE "id" = $8) AS "technologicalCardName"
     `,
     [
       input.name,
       slug,
       input.category,
       input.description,
+      input.imageUrl,
       input.priceCents,
       input.priceListType === "CLIENT",
       input.technologicalCardId,
@@ -243,22 +272,24 @@ export async function updateCatalogItem(
         "slug" = $3,
         "category" = $4,
         "description" = $5,
-        "priceCents" = $6,
-        "isPublished" = $7,
-        "technologicalCardId" = $8
+        "imageUrl" = $6,
+        "priceCents" = $7,
+        "isPublished" = $8,
+        "technologicalCardId" = $9
       WHERE "id" = $1
       RETURNING
         "id",
         "name",
         "slug",
         "category",
-        (SELECT "pizzaSize" FROM "TechnologicalCard" WHERE "id" = $8) AS "pizzaSize",
+        (SELECT "pizzaSize" FROM "TechnologicalCard" WHERE "id" = $9) AS "pizzaSize",
         "description",
+        "imageUrl",
         "priceCents",
         "isPublished",
         "createdAt",
         "technologicalCardId",
-        (SELECT "name" FROM "TechnologicalCard" WHERE "id" = $8) AS "technologicalCardName"
+        (SELECT "name" FROM "TechnologicalCard" WHERE "id" = $9) AS "technologicalCardName"
     `,
     [
       id,
@@ -266,6 +297,7 @@ export async function updateCatalogItem(
       slug,
       input.category,
       input.description,
+      input.imageUrl,
       input.priceCents,
       input.priceListType === "CLIENT",
       input.technologicalCardId,

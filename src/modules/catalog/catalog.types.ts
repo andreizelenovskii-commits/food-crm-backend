@@ -14,6 +14,7 @@ export type CatalogItem = {
   category: string | null;
   pizzaSize: string | null;
   description: string | null;
+  imageUrl: string | null;
   priceCents: number;
   createdAt: string;
   technologicalCardId: number;
