@@ -1,0 +1,100 @@
+name: Deploy backend staging
+
+on:
+  push:
+    branches: ["dev"]
+  workflow_dispatch:
+
+concurrency:
+  group: backend-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_DIR: /home/deploy/apps/food-crm-backend-staging
+      PROD_APP_DIR: /home/deploy/apps/food-crm-backend
+      DEPLOY_HOST: 163.5.29.68
+      DEPLOY_USER: deploy
+      DEPLOY_PORT: 22
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "${{ secrets.DEPLOY_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release
+        run: |
+          set -euo pipefail
+          RELEASE_DIR="$APP_DIR/releases/$GITHUB_SHA"
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "mkdir -p '$RELEASE_DIR'"
+          tar \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='dist' \
+            --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            -czf - . | "${SSH[@]}" "tar -xzf - -C '$RELEASE_DIR'"
+
+      - name: Migrate and activate release
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "APP_DIR='$APP_DIR' PROD_APP_DIR='$PROD_APP_DIR' RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          mkdir -p "$APP_DIR/shared"
+          if [ ! -f "$APP_DIR/shared/.env" ]; then
+            if [ -f "$PROD_APP_DIR/shared/.env" ]; then
+              cp "$PROD_APP_DIR/shared/.env" "$APP_DIR/shared/.env"
+            else
+              touch "$APP_DIR/shared/.env"
+            fi
+          fi
+          test -f "$APP_DIR/shared/.env"
+          grep -q '^DATABASE_URL=.*food_crm_staging' "$APP_DIR/shared/.env"
+          grep -v -E '^(PORT|BACKEND_CORS_ORIGIN|BACKEND_SESSION_COOKIE_DOMAIN|BACKEND_SESSION_COOKIE_NAME)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
+          mv "$APP_DIR/shared/.env.tmp" "$APP_DIR/shared/.env"
+          {
+            echo "PORT=4100"
+            echo "BACKEND_CORS_ORIGIN=https://dev.crm.crmandromeda.ru,http://localhost:3000,http://127.0.0.1:3000"
+            echo "BACKEND_SESSION_COOKIE_DOMAIN=.crmandromeda.ru"
+            echo "BACKEND_SESSION_COOKIE_NAME=food_crm_staging_api_session"
+          } >> "$APP_DIR/shared/.env"
+          ln -sfn "$APP_DIR/shared/.env" "$RELEASE_DIR/.env"
+          cd "$RELEASE_DIR"
+          npm ci
+          npm run db:deploy
+          ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
+          cd "$APP_DIR/current"
+          pm2 delete food-crm-backend-staging || true
+          pm2 start ecosystem.staging.config.cjs --only food-crm-backend-staging --update-env
+          sleep 5
+          curl -fsS http://127.0.0.1:4100/api/v1/health >/dev/null
+          UPLOAD_STATUS="$(curl -sS -o /tmp/food-crm-staging-upload-route-check.txt -w '%{http_code}' -X POST http://127.0.0.1:4100/api/v1/catalog/uploads)"
+          test "$UPLOAD_STATUS" != "404"
+          pm2 save
+          find "$APP_DIR/releases" -mindepth 1 -maxdepth 1 -type d ! -samefile "$RELEASE_DIR" -printf '%T@ %p\n' | sort -nr | tail -n +6 | cut -d' ' -f2- | xargs -r rm -rf
+          REMOTE
