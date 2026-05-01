@@ -22,6 +22,20 @@ function getRequestIp(headers: Record<string, unknown>, fallback: string) {
   return fallback;
 }
 
+function getSessionCookieDomain(hostname: string) {
+  if (backendEnv.sessionCookieDomain) {
+    return backendEnv.sessionCookieDomain;
+  }
+
+  const normalizedHostname = hostname.split(":")[0]?.toLowerCase() ?? "";
+
+  if (normalizedHostname === "api.crmandromeda.ru") {
+    return ".crmandromeda.ru";
+  }
+
+  return undefined;
+}
+
 export async function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/v1/auth/login", async (request, reply) => {
     const body = getRequestBody(request);
@@ -47,7 +61,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      domain: backendEnv.sessionCookieDomain ?? undefined,
+      domain: getSessionCookieDomain(request.hostname),
       path: "/",
       maxAge: getSessionMaxAgeSeconds(),
     });
@@ -66,7 +80,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/auth/logout", { preHandler: authenticateRequest }, async (_request, reply) => {
     reply.clearCookie(backendEnv.sessionCookieName, {
-      domain: backendEnv.sessionCookieDomain ?? undefined,
+      domain: getSessionCookieDomain(_request.hostname),
       path: "/",
     });
     return { data: { success: true } };
