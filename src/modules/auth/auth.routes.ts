@@ -22,12 +22,20 @@ function getRequestIp(headers: Record<string, unknown>, fallback: string) {
   return fallback;
 }
 
-function getSessionCookieDomain(hostname: string) {
+function getHeaderValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getSessionCookieDomain(request: { hostname: string; headers: Record<string, unknown> }) {
   if (backendEnv.sessionCookieDomain) {
     return backendEnv.sessionCookieDomain;
   }
 
-  const normalizedHostname = hostname.split(":")[0]?.toLowerCase() ?? "";
+  const forwardedHost = getHeaderValue(request.headers["x-forwarded-host"] as string | string[] | undefined);
+  const host = getHeaderValue(request.headers.host as string | string[] | undefined);
+  const normalizedHostname = (forwardedHost || host || request.hostname)
+    .split(":")[0]
+    ?.toLowerCase() ?? "";
 
   if (normalizedHostname === "api.crmandromeda.ru") {
     return ".crmandromeda.ru";
@@ -61,7 +69,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      domain: getSessionCookieDomain(request.hostname),
+      domain: getSessionCookieDomain(request),
       path: "/",
       maxAge: getSessionMaxAgeSeconds(),
     });
@@ -80,7 +88,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/auth/logout", { preHandler: authenticateRequest }, async (_request, reply) => {
     reply.clearCookie(backendEnv.sessionCookieName, {
-      domain: getSessionCookieDomain(_request.hostname),
+      domain: getSessionCookieDomain(_request),
       path: "/",
     });
     return { data: { success: true } };
