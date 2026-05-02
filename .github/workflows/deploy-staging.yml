@@ -74,14 +74,23 @@ jobs:
             fi
           fi
           test -f "$APP_DIR/shared/.env"
-          if ! grep -q '^DATABASE_URL=.*food_crm_staging' "$APP_DIR/shared/.env"; then
-            echo "ERROR: в $APP_DIR/shared/.env строка DATABASE_URL должна указывать на БД food_crm_staging."
-            echo "Если файл скопирован с прода, поправь URL на staging-БД или заново прогоняй workflow «Setup staging infrastructure»."
+
+          # Как в «Setup staging»: из продового DATABASE_URL получаем URL для food_crm_staging
+          PROD_DATABASE_URL="$(grep -E '^DATABASE_URL=' "$PROD_APP_DIR/shared/.env" | cut -d '=' -f2-)"
+          if [ -z "$PROD_DATABASE_URL" ]; then
+            echo "ERROR: нет DATABASE_URL в $PROD_APP_DIR/shared/.env"
             exit 1
           fi
-          grep -v -E '^(PORT|BACKEND_CORS_ORIGIN|BACKEND_SESSION_COOKIE_DOMAIN|BACKEND_SESSION_COOKIE_NAME)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
+          STAGING_DATABASE_URL="$(printf '%s' "$PROD_DATABASE_URL" | sed -E 's#/(food_crm)(\\?|$)#/food_crm_staging\\2#')"
+          if [ "$STAGING_DATABASE_URL" = "$PROD_DATABASE_URL" ]; then
+            echo "ERROR: не удалось получить URL для food_crm_staging из prod DATABASE_URL (ожидается имя БД food_crm в пути)."
+            exit 1
+          fi
+
+          grep -v -E '^(DATABASE_URL|PORT|BACKEND_CORS_ORIGIN|BACKEND_SESSION_COOKIE_DOMAIN|BACKEND_SESSION_COOKIE_NAME)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
           mv "$APP_DIR/shared/.env.tmp" "$APP_DIR/shared/.env"
           {
+            echo "DATABASE_URL=$STAGING_DATABASE_URL"
             echo "PORT=4100"
             echo "BACKEND_CORS_ORIGIN=https://dev.crm.crmandromeda.ru,http://localhost:3000,http://127.0.0.1:3000"
             echo "BACKEND_SESSION_COOKIE_DOMAIN=.crmandromeda.ru"
