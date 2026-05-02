@@ -21,6 +21,8 @@ type CreateUserInput = {
 
 export interface AuthUserRepository {
   findByEmail(email: string): Promise<AuthUser | null>;
+  /** Логин: мобильный 7XXXXXXXXXX (колонка User.email) или legacy email. */
+  findByLoginKey(login: string): Promise<AuthUser | null>;
   create(input: CreateUserInput): Promise<AuthUser>;
   updatePasswordHash(userId: number, passwordHash: string): Promise<void>;
   updateUser(userId: number, input: { email: string; role: UserRole; passwordHash?: string }): Promise<void>;
@@ -52,6 +54,29 @@ class PgAuthUserRepository implements AuthUserRepository {
     const row = result.rows[0];
 
     return row ? mapRowToAuthUser(row) : null;
+  }
+
+  async findByLoginKey(login: string) {
+    const trimmed = login.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^7\d{10}$/.test(trimmed)) {
+      const result = await pool.query<UserRow>(
+        `
+          SELECT "id", "email", "password", "role"
+          FROM "User"
+          WHERE "email" = $1
+          LIMIT 1
+        `,
+        [trimmed],
+      );
+      const row = result.rows[0];
+      return row ? mapRowToAuthUser(row) : null;
+    }
+
+    return this.findByEmail(trimmed);
   }
 
   async create({ email, passwordHash, role }: CreateUserInput) {

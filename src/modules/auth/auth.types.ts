@@ -41,8 +41,9 @@ export function getUserRoleLabel(value: unknown) {
   return normalizedRole ? USER_ROLE_LABELS[normalizedRole] : String(value ?? "Неизвестная роль");
 }
 
+/** Логин: 11 цифр 7XXXXXXXXXX или legacy email. */
 export type LoginInput = {
-  email: string;
+  login: string;
   password: string;
 };
 
@@ -53,9 +54,10 @@ export type AuthUser = {
   role: UserRole;
 };
 
+/** Поле `phone` — идентификатор входа (номер 7… или legacy email), значение колонки User.email в БД. */
 export type SessionUser = {
   id: number;
-  email: string;
+  phone: string;
   role: UserRole;
   displayName?: string | null;
 };

@@ -5,7 +5,9 @@ const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
 export type ApiSessionPayload = {
   userId: number;
-  email: string;
+  phone: string;
+  /** Старые токены после перехода на телефон */
+  email?: string;
   role: string;
   expiresAt: number;
 };
@@ -51,13 +53,22 @@ export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
   try {
     const payload = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
-    ) as ApiSessionPayload;
+    ) as ApiSessionPayload & { email?: string };
 
     if (payload.expiresAt <= Date.now()) {
       return null;
     }
 
-    return payload;
+    const phone = payload.phone ?? payload.email ?? "";
+
+    if (!phone) {
+      return null;
+    }
+
+    return {
+      ...payload,
+      phone,
+    };
   } catch {
     return null;
   }

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getDashboardMetrics, getEmployeeDashboardMetricsByEmail } from "@backend/modules/dashboard/dashboard.service";
+import { getDashboardMetrics, getEmployeeDashboardMetricsByLogin } from "@backend/modules/dashboard/dashboard.service";
 import { requirePermission } from "@backend/modules/auth/auth-context";
 
 export async function registerDashboardRoutes(app: FastifyInstance) {
@@ -10,7 +10,7 @@ export async function registerDashboardRoutes(app: FastifyInstance) {
     return {
       data: {
         dashboard: await getDashboardMetrics(),
-        employeeDashboard: user ? await getEmployeeDashboardMetricsByEmail(user.email, month) : null,
+        employeeDashboard: user ? await getEmployeeDashboardMetricsByLogin(user.phone, month) : null,
       },
     };
   });

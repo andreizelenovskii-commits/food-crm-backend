@@ -5,7 +5,7 @@ import {
 import type { UserRole } from "@backend/modules/auth/auth.types";
 import {
   getDashboardAggregateData,
-  getEmployeeDashboardSourceByEmail,
+  getEmployeeDashboardSourceByLogin,
 } from "@backend/modules/dashboard/dashboard.repository";
 import type {
   DashboardSnapshot,
@@ -101,16 +101,16 @@ export async function getDashboardMetrics(): Promise<DashboardSnapshot> {
   };
 }
 
-export async function getEmployeeDashboardMetricsByEmail(
-  email: string,
+export async function getEmployeeDashboardMetricsByLogin(
+  login: string,
   monthKey?: string | null,
-): Promise<EmployeeDashboardSnapshot> {
+): Promise<EmployeeDashboardSnapshot | null> {
   const selectedMonth = parseMonthKey(monthKey);
   const selectedMonthKey = formatMonthKey(selectedMonth);
   const nextMonth = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
   const monthStart = `${selectedMonthKey}-01`;
   const monthEnd = `${formatMonthKey(nextMonth)}-01`;
-  const employee = await getEmployeeDashboardSourceByEmail(email, monthStart, monthEnd);
+  const employee = await getEmployeeDashboardSourceByLogin(login, monthStart, monthEnd);
 
   if (!employee) {
     return null;
