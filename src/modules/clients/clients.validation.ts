@@ -13,6 +13,26 @@ function normalizeInput(value: FormDataEntryValue | null) {
 }
 
 function buildClientAddress(formData: FormData) {
+  const addressesJson = normalizeInput(formData.get("addressesJson"));
+
+  if (addressesJson) {
+    try {
+      const parsed = JSON.parse(addressesJson) as unknown;
+
+      if (Array.isArray(parsed)) {
+        const addresses = parsed
+          .map((address) => String(address ?? "").trim())
+          .filter(Boolean);
+
+        if (addresses.length > 0) {
+          return addresses.join("\n");
+        }
+      }
+    } catch {
+      throw new ValidationError("Проверь адреса клиента");
+    }
+  }
+
   const residenceType = normalizeInput(formData.get("addressResidenceType")) || "APARTMENT";
   const city = normalizeInput(formData.get("addressCity"));
   const street = normalizeInput(formData.get("addressStreet"));

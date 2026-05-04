@@ -1,30 +1,25 @@
 import { assertStrongPassword } from "@backend/modules/auth/auth.password";
 import { ValidationError } from "@backend/shared/errors/app-error";
+import { parseLoginPhone } from "@backend/lib/phone";
 
 function normalizeInput(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
 
 export type IssueEmployeeAccessInput = {
-  email: string;
+  phone: string;
   password: string;
 };
 
-export function parseIssueEmployeeAccessInput(
-  formData: FormData,
-): IssueEmployeeAccessInput {
-  const email = normalizeInput(formData.get("email")).toLowerCase();
+export function parseIssueEmployeeAccessInput(formData: FormData): IssueEmployeeAccessInput {
+  const phoneRaw = normalizeInput(formData.get("phone")) || normalizeInput(formData.get("email"));
   const password = normalizeInput(formData.get("password"));
 
-  if (!email || !password) {
-    throw new ValidationError("Заполните логин и пароль для сотрудника");
+  if (!phoneRaw || !password) {
+    throw new ValidationError("Заполните номер телефона и пароль для сотрудника");
   }
 
-  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-  if (!isValidEmail) {
-    throw new ValidationError("Введите корректный email для входа");
-  }
+  const phone = parseLoginPhone(phoneRaw);
 
   try {
     assertStrongPassword(password);
@@ -35,7 +30,7 @@ export function parseIssueEmployeeAccessInput(
   }
 
   return {
-    email,
+    phone,
     password,
   };
 }

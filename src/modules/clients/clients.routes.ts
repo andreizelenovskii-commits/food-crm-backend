@@ -23,6 +23,7 @@ const CLIENT_FIELDS = [
   "addressEntrance",
   "addressFloor",
   "addressApartment",
+  "addressesJson",
   "notes",
 ];
 

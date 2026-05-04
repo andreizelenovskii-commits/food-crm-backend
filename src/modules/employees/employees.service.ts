@@ -32,7 +32,7 @@ export async function deleteEmployeeService(employeeId: number): Promise<boolean
 
 export async function issueEmployeeAccessService(input: {
   employeeId: number;
-  email: string;
+  phone: string;
   password: string;
 }): Promise<Employee | null> {
   return issueEmployeeAccess(input);
