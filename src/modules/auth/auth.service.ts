@@ -51,7 +51,7 @@ export async function authenticateUser(
 
   return {
     id: user.id,
-    phone: user.email,
+    phone: user.phone,
     role: user.role,
   };
 }

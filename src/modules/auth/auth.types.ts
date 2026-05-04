@@ -49,12 +49,12 @@ export type LoginInput = {
 
 export type AuthUser = {
   id: number;
-  email: string;
+  phone: string;
   passwordHash: string;
   role: UserRole;
 };
 
-/** Поле `phone` — идентификатор входа (номер 7… или legacy email), значение колонки User.email в БД. */
+/** Поле `phone` — идентификатор входа (номер 7… или legacy email). */
 export type SessionUser = {
   id: number;
   phone: string;

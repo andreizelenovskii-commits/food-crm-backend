@@ -17,15 +17,15 @@ type SessionUserFallback = {
 };
 
 async function findPersistedUserById(userId: number) {
-  return pool.query<{ email: string; role: string }>(
+  return pool.query<{ phone: string; role: string }>(
     `
-      SELECT "email", "role"
+      SELECT "phone", "role"
       FROM "User"
       WHERE "id" = $1
       LIMIT 1
     `,
     [userId],
-  ).catch(() => ({ rows: [] as Array<{ email: string; role: string }> }));
+  ).catch(() => ({ rows: [] as Array<{ phone: string; role: string }> }));
 }
 
 async function findEmployeeDisplayName(loginId: string) {
@@ -58,7 +58,7 @@ export async function resolveSessionUserIdentity(
 ): Promise<SessionUserIdentity | null> {
   const userResult = await findPersistedUserById(userId);
   const persistedUser = userResult.rows[0];
-  const resolvedPhone = persistedUser?.email?.trim() || fallback.phone;
+  const resolvedPhone = persistedUser?.phone?.trim() || fallback.phone;
   const role =
     normalizeUserRole(persistedUser?.role) ??
     normalizeUserRole(fallback.role);
