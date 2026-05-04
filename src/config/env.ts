@@ -11,6 +11,7 @@ type BackendEnv = {
   sessionSecret: string;
   sessionCookieName: string;
   sessionCookieDomain: string | null;
+  sessionTtlDays: number;
   corsOrigins: string[];
 };
 
@@ -45,6 +46,16 @@ function parseCorsOrigins(value: string | null) {
     .filter(Boolean);
 }
 
+function parsePositiveInteger(value: string | null, fallback: number, name: string) {
+  const parsed = Number(value ?? fallback);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return parsed;
+}
+
 export const backendEnv: BackendEnv = {
   host: getOptionalEnv("HOST") ?? "0.0.0.0",
   port: parsePort(getOptionalEnv("PORT")),
@@ -52,5 +63,6 @@ export const backendEnv: BackendEnv = {
   sessionSecret: getOptionalEnv("BACKEND_SESSION_SECRET") ?? getRequiredEnv("SESSION_SECRET"),
   sessionCookieName: getOptionalEnv("BACKEND_SESSION_COOKIE_NAME") ?? "food_crm_api_session",
   sessionCookieDomain: getOptionalEnv("BACKEND_SESSION_COOKIE_DOMAIN"),
+  sessionTtlDays: parsePositiveInteger(getOptionalEnv("BACKEND_SESSION_TTL_DAYS"), 30, "BACKEND_SESSION_TTL_DAYS"),
   corsOrigins: parseCorsOrigins(getOptionalEnv("BACKEND_CORS_ORIGIN")),
 };

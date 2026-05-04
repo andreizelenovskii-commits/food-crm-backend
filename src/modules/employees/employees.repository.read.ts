@@ -21,6 +21,7 @@ export async function getAllEmployees(): Promise<Employee[]> {
         e."monthlyHours",
         e."birthDate",
         e."hireDate",
+        e."passwordUpdatedAt",
         e."createdAt",
         COUNT(o."id") AS "ordersCount"
       FROM "Employee" e
@@ -36,6 +37,7 @@ export async function getAllEmployees(): Promise<Employee[]> {
         e."monthlyHours",
         e."birthDate",
         e."hireDate",
+        e."passwordUpdatedAt",
         e."createdAt"
       ORDER BY e."createdAt" DESC
     `,
@@ -51,7 +53,7 @@ export async function getEmployeeById(employeeId: number): Promise<Employee | nu
 
   const result = await pool.query<EmployeeRow>(
     `
-      SELECT "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "createdAt"
+      SELECT "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "passwordUpdatedAt", "createdAt"
       FROM "Employee"
       WHERE "id" = $1
       LIMIT 1

@@ -62,6 +62,7 @@ export type Employee = {
   ordersCount: number;
   birthDate?: string | null;
   hireDate?: string | null;
+  passwordUpdatedAt?: string | null;
   createdAt: string;
 };
 

@@ -18,7 +18,7 @@ export async function createEmployee(input: CreateEmployeeInput): Promise<Employ
     `
       INSERT INTO "Employee" ("name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate")
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "createdAt"
+      RETURNING "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "passwordUpdatedAt", "createdAt"
     `,
     [
       input.name,
@@ -174,7 +174,7 @@ export async function updateEmployee(employeeId: number, input: UpdateEmployeeIn
         UPDATE "Employee"
         SET ${updates.join(", ")}
         WHERE "id" = $${paramIndex}
-        RETURNING "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "createdAt"
+        RETURNING "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "passwordUpdatedAt", "createdAt"
       `,
       values,
     );

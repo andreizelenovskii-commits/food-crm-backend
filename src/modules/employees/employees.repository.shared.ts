@@ -19,6 +19,7 @@ export type EmployeeRow = {
   ordersCount?: string;
   birthDate: Date | null;
   hireDate: Date | null;
+  passwordUpdatedAt: Date | null;
   createdAt: Date;
 };
 
@@ -69,6 +70,7 @@ export function mapRowToEmployee(row: EmployeeRow): Employee {
     ordersCount: Number(row.ordersCount ?? 0),
     birthDate: row.birthDate ? formatDateOnly(row.birthDate) : null,
     hireDate: row.hireDate ? formatDateOnly(row.hireDate) : null,
+    passwordUpdatedAt: row.passwordUpdatedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }

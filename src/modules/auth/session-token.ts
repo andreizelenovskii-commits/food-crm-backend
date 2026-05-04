@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { backendEnv } from "@backend/config/env";
 
-const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+const DAY_MS = 1000 * 60 * 60 * 24;
 
 export type ApiSessionPayload = {
   userId: number;
@@ -17,7 +17,7 @@ function sign(payload: string) {
 }
 
 export function createApiSessionToken(payload: Omit<ApiSessionPayload, "expiresAt">) {
-  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const expiresAt = Date.now() + backendEnv.sessionTtlDays * DAY_MS;
   const encodedPayload = Buffer.from(
     JSON.stringify({
       ...payload,
@@ -75,5 +75,5 @@ export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
 }
 
 export function getSessionMaxAgeSeconds() {
-  return Math.floor(SESSION_TTL_MS / 1000);
+  return backendEnv.sessionTtlDays * 24 * 60 * 60;
 }

@@ -27,7 +27,7 @@ export async function issueEmployeeAccess(input: {
   const phoneDisplay = loginDigitsToEmployeeDisplay(phoneDigits);
   const employeeResult = await pool.query<EmployeeRow>(
     `
-      SELECT "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "createdAt"
+      SELECT "id", "name", "email", "role", "phone", "messenger", "schedule", "monthlyHours", "birthDate", "hireDate", "passwordUpdatedAt", "createdAt"
       FROM "Employee"
       WHERE "id" = $1
       LIMIT 1
@@ -63,7 +63,7 @@ export async function issueEmployeeAccess(input: {
 
   await withTransaction(async (client) => {
     await client.query(
-      `UPDATE "Employee" SET "phone" = $2 WHERE "id" = $1`,
+      `UPDATE "Employee" SET "phone" = $2, "passwordUpdatedAt" = NOW() WHERE "id" = $1`,
       [input.employeeId, phoneDisplay],
     );
 
