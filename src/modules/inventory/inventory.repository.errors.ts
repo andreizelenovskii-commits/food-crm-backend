@@ -1,5 +1,14 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
 
+export function isPostgresError(error: unknown, code: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
+}
+
 export function mapProductConflict(error: unknown): never {
   if (
     typeof error === "object" &&

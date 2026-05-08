@@ -6,10 +6,19 @@ import type { InventoryResponsibleOption, ProductItem } from "@backend/modules/i
 import type { ProductInput } from "@backend/modules/inventory/inventory.validation";
 import {
   ensureUniqueProductName,
+  isPostgresError,
   mapProductConflict,
   mapRowToProduct,
 } from "@backend/modules/inventory/inventory.repository.internals";
 import { PRODUCT_SKU_SQL, type ProductRow } from "@backend/modules/inventory/inventory.repository.rows";
+
+function buildProductUsageMessage(usages: string[]) {
+  if (usages.length === 0) {
+    return "Этот товар уже используется, поэтому удалить его нельзя.";
+  }
+
+  return `Этот товар уже используется в ${usages.join(", ")}, поэтому удалить его нельзя.`;
+}
 
 export async function getProducts(): Promise<ProductItem[]> {
   const result = await pool.query<ProductRow>(
@@ -195,27 +204,55 @@ export async function deleteProduct(productId: number): Promise<boolean> {
     return false;
   }
 
-  const usageResult = await pool.query<{ count: string }>(
+  const usageResult = await pool.query<{
+    source: "orders" | "techCards" | "inventorySessions" | "incomingActs" | "writeoffActs";
+    count: string;
+  }>(
     `
-      SELECT COUNT(*) AS count
-      FROM "OrderItem"
-      WHERE "productId" = $1
+      SELECT 'orders' AS source, COUNT(*) AS count FROM "OrderItem" WHERE "productId" = $1
+      UNION ALL
+      SELECT 'techCards' AS source, COUNT(*) AS count FROM "TechCardIngredient" WHERE "productId" = $1
+      UNION ALL
+      SELECT 'inventorySessions' AS source, COUNT(*) AS count FROM "InventorySessionItem" WHERE "productId" = $1
+      UNION ALL
+      SELECT 'incomingActs' AS source, COUNT(*) AS count FROM "IncomingActItem" WHERE "productId" = $1
+      UNION ALL
+      SELECT 'writeoffActs' AS source, COUNT(*) AS count FROM "WriteoffActItem" WHERE "productId" = $1
     `,
     [productId],
   );
 
-  if (Number(usageResult.rows[0]?.count ?? 0) > 0) {
-    return false;
+  const usageLabels: Record<(typeof usageResult.rows)[number]["source"], string> = {
+    orders: "заказах",
+    techCards: "техкартах",
+    inventorySessions: "инвентаризациях",
+    incomingActs: "актах поступления",
+    writeoffActs: "актах списания",
+  };
+  const usages = usageResult.rows
+    .filter((row) => Number(row.count) > 0)
+    .map((row) => usageLabels[row.source]);
+
+  if (usages.length > 0) {
+    throw new ValidationError(buildProductUsageMessage(usages));
   }
 
   await ensureRecentDatabaseBackup("product-delete");
-  const result = await pool.query(
-    `
-      DELETE FROM "Product"
-      WHERE "id" = $1
-    `,
-    [productId],
-  );
+  try {
+    const result = await pool.query(
+      `
+        DELETE FROM "Product"
+        WHERE "id" = $1
+      `,
+      [productId],
+    );
 
-  return (result.rowCount ?? 0) > 0;
+    return (result.rowCount ?? 0) > 0;
+  } catch (error) {
+    if (isPostgresError(error, "23503")) {
+      throw new ValidationError(buildProductUsageMessage([]));
+    }
+
+    throw error;
+  }
 }
