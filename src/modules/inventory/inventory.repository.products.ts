@@ -213,7 +213,11 @@ export async function deleteProduct(productId: number): Promise<boolean> {
       UNION ALL
       SELECT 'techCards' AS source, COUNT(*) AS count FROM "TechCardIngredient" WHERE "productId" = $1
       UNION ALL
-      SELECT 'inventorySessions' AS source, COUNT(*) AS count FROM "InventorySessionItem" WHERE "productId" = $1
+      SELECT 'inventorySessions' AS source, COUNT(*) AS count
+      FROM "InventorySessionItem" i
+      INNER JOIN "InventorySession" s ON s."id" = i."inventorySessionId"
+      WHERE i."productId" = $1
+        AND s."closedAt" IS NULL
       UNION ALL
       SELECT 'incomingActs' AS source, COUNT(*) AS count FROM "IncomingActItem" WHERE "productId" = $1
       UNION ALL

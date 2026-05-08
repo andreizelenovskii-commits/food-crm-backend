@@ -26,16 +26,16 @@ export async function getInventorySessionItemsBySessionIds(sessionIds: number[])
       SELECT
         i."id",
         i."inventorySessionId",
-        i."productId",
+        COALESCE(i."productId", 0) AS "productId",
         i."productName",
         i."productCategory",
         i."productUnit",
         i."stockQuantity",
-        p."stockQuantity" AS "currentStockQuantity",
+        COALESCE(p."stockQuantity", i."stockQuantity") AS "currentStockQuantity",
         i."actualQuantity",
-        p."priceCents"
+        COALESCE(p."priceCents", 0) AS "priceCents"
       FROM "InventorySessionItem" i
-      INNER JOIN "Product" p ON p."id" = i."productId"
+      LEFT JOIN "Product" p ON p."id" = i."productId"
       WHERE i."inventorySessionId" = ANY($1::int[])
       ORDER BY LOWER(i."productName") ASC, i."id" ASC
     `,

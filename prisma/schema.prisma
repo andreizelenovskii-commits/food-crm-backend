@@ -175,8 +175,8 @@ model InventorySessionItem {
   id                 Int              @id @default(autoincrement())
   inventorySession   InventorySession @relation(fields: [inventorySessionId], references: [id])
   inventorySessionId Int
-  product            Product          @relation(fields: [productId], references: [id])
-  productId          Int
+  product            Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId          Int?
   productName        String
   productCategory    String?
   productUnit        String
