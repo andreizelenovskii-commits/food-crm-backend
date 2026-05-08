@@ -295,3 +295,58 @@ export async function updateTechCard(id: number, input: TechCardInput): Promise<
     throw error;
   }
 }
+
+export async function deleteTechCard(id: number): Promise<boolean> {
+  if (!Number.isInteger(id) || id <= 0) {
+    return false;
+  }
+
+  const catalogUsage = await pool.query<{ count: string }>(
+    `
+      SELECT COUNT(*)::text AS count
+      FROM "CatalogItem"
+      WHERE "technologicalCardId" = $1
+    `,
+    [id],
+  );
+
+  if (Number(catalogUsage.rows[0]?.count ?? 0) > 0) {
+    throw new ValidationError(
+      "Эту техкарту нельзя удалить: она привязана к позициям каталога. Сначала отвяжите или удалите связанные позиции.",
+    );
+  }
+
+  return await withTransaction(async (client) => {
+    const exists = await client.query<{ id: number }>(
+      `
+        SELECT "id"
+        FROM "TechnologicalCard"
+        WHERE "id" = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    if (!exists.rowCount) {
+      return false;
+    }
+
+    await client.query(
+      `
+        DELETE FROM "TechCardIngredient"
+        WHERE "technologicalCardId" = $1
+      `,
+      [id],
+    );
+
+    const deleted = await client.query(
+      `
+        DELETE FROM "TechnologicalCard"
+        WHERE "id" = $1
+      `,
+      [id],
+    );
+
+    return (deleted.rowCount ?? 0) > 0;
+  });
+}

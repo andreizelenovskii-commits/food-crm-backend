@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   addTechCard,
+  deleteTechCardById,
   fetchTechCardById,
   fetchTechCardOptions,
   fetchTechCardProductOptions,
@@ -59,5 +60,13 @@ export async function registerTechCardRoutes(app: FastifyInstance) {
       const input = parseTechCardInput(techCardFormData(getRequestBody(request)));
       return { data: await updateTechCardById(getNumericParam(request, "techCardId"), input) };
     },
+  );
+
+  app.delete(
+    "/api/v1/tech-cards/:techCardId",
+    { preHandler: requirePermission("manage_inventory") },
+    async (request) => ({
+      data: { deleted: await deleteTechCardById(getNumericParam(request, "techCardId")) },
+    }),
   );
 }

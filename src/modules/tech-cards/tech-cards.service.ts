@@ -1,5 +1,7 @@
+import { ValidationError } from "@backend/shared/errors/app-error";
 import {
   createTechCard,
+  deleteTechCard,
   getTechCardById,
   getTechCardOptions,
   getTechCardProductOptions,
@@ -30,4 +32,14 @@ export async function addTechCard(input: TechCardInput) {
 
 export async function updateTechCardById(id: number, input: TechCardInput) {
   return updateTechCard(id, input);
+}
+
+export async function deleteTechCardById(id: number) {
+  const deleted = await deleteTechCard(id);
+
+  if (!deleted) {
+    throw new ValidationError("Техкарта не найдена");
+  }
+
+  return true;
 }
