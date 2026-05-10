@@ -4,7 +4,7 @@ import {
   type CatalogPriceListType,
 } from "@backend/modules/catalog/catalog.types";
 import {
-  TECH_CARD_CATEGORIES,
+  PRICE_TECH_CARD_CATEGORIES,
   type TechCardCategory,
 } from "@backend/modules/tech-cards/tech-cards.types";
 
@@ -52,7 +52,7 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
     throw new ValidationError("Выберите корректный тип прайса");
   }
 
-  if (!TECH_CARD_CATEGORIES.includes(category as TechCardCategory)) {
+  if (!PRICE_TECH_CARD_CATEGORIES.includes(category as (typeof PRICE_TECH_CARD_CATEGORIES)[number])) {
     throw new ValidationError("Выберите категорию из списка технологических карт");
   }
 
