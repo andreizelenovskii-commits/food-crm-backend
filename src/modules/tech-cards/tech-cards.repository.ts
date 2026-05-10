@@ -301,21 +301,6 @@ export async function deleteTechCard(id: number): Promise<boolean> {
     return false;
   }
 
-  const catalogUsage = await pool.query<{ count: string }>(
-    `
-      SELECT COUNT(*)::text AS count
-      FROM "CatalogItem"
-      WHERE "technologicalCardId" = $1
-    `,
-    [id],
-  );
-
-  if (Number(catalogUsage.rows[0]?.count ?? 0) > 0) {
-    throw new ValidationError(
-      "Эту техкарту нельзя удалить: она привязана к позициям каталога. Сначала отвяжите или удалите связанные позиции.",
-    );
-  }
-
   return await withTransaction(async (client) => {
     const exists = await client.query<{ id: number }>(
       `
@@ -330,6 +315,14 @@ export async function deleteTechCard(id: number): Promise<boolean> {
     if (!exists.rowCount) {
       return false;
     }
+
+    await client.query(
+      `
+        DELETE FROM "CatalogItem"
+        WHERE "technologicalCardId" = $1
+      `,
+      [id],
+    );
 
     await client.query(
       `
