@@ -4,6 +4,7 @@ import {
   fetchOrderById,
   fetchOrderCreateOptions,
   fetchOrders,
+  fetchOrdersByClientId,
   updateOrderStatusById,
 } from "@backend/modules/orders/orders.service";
 import { ORDER_STATUSES, type OrderStatus } from "@backend/modules/orders/orders.types";
@@ -28,6 +29,10 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
 
   app.get("/api/v1/orders/options", { preHandler: requirePermission("view_orders") }, async () => ({
     data: await fetchOrderCreateOptions(),
+  }));
+
+  app.get("/api/v1/orders/client/:clientId", { preHandler: requirePermission("view_orders") }, async (request) => ({
+    data: await fetchOrdersByClientId(getNumericParam(request, "clientId")),
   }));
 
   app.post("/api/v1/orders", { preHandler: requirePermission("manage_orders") }, async (request) => {

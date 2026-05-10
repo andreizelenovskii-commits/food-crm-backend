@@ -97,8 +97,10 @@ model Order {
   id          Int         @id @default(autoincrement())
   status      OrderStatus @default(SENT_TO_KITCHEN)
   isInternal  Boolean     @default(false)
-  client      Client      @relation(fields: [clientId], references: [id])
-  clientId    Int
+  client      Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId    Int?
+  clientNameSnapshot String
+  clientTypeSnapshot ClientType
   employee    Employee    @relation(fields: [employeeId], references: [id])
   employeeId  Int
   subtotalCents Int

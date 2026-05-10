@@ -7,7 +7,7 @@ export type OrderRow = {
   id: number;
   status: string;
   isInternal: boolean;
-  clientId: number;
+  clientId: number | null;
   clientName: string;
   clientType: "CLIENT" | "ORGANIZATION";
   employeeId: number;

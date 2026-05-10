@@ -19,18 +19,20 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
   return withTransaction(async (client) => {
     const clientExists = await client.query<{
       id: number;
+      name: string;
       type: "CLIENT" | "ORGANIZATION";
       totalSpentCents: string;
     }>(
       `
         SELECT
           c."id",
+          c."name",
           c."type",
           COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
         FROM "Client" c
         LEFT JOIN "Order" o ON o."clientId" = c."id"
         WHERE c."id" = $1
-        GROUP BY c."id", c."type"
+        GROUP BY c."id", c."name", c."type"
         LIMIT 1
       `,
       [input.clientId],
@@ -105,12 +107,14 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           "status",
           "isInternal",
           "clientId",
+          "clientNameSnapshot",
+          "clientTypeSnapshot",
           "employeeId",
           "subtotalCents",
           "discountPercent",
           "totalCents"
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING
           "id",
           "status",
@@ -119,16 +123,18 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           "discountPercent",
           "totalCents",
           "createdAt",
-          (SELECT c."id" FROM "Client" c WHERE c."id" = $3) AS "clientId",
-          (SELECT c."name" FROM "Client" c WHERE c."id" = $3) AS "clientName",
-          (SELECT c."type" FROM "Client" c WHERE c."id" = $3) AS "clientType",
-          (SELECT e."id" FROM "Employee" e WHERE e."id" = $4) AS "employeeId",
-          (SELECT e."name" FROM "Employee" e WHERE e."id" = $4) AS "employeeName"
+          "clientId",
+          "clientNameSnapshot" AS "clientName",
+          "clientTypeSnapshot" AS "clientType",
+          (SELECT e."id" FROM "Employee" e WHERE e."id" = $6) AS "employeeId",
+          (SELECT e."name" FROM "Employee" e WHERE e."id" = $6) AS "employeeName"
       `,
       [
         input.status,
         input.isInternal,
         input.clientId,
+        currentClient.name,
+        currentClient.type,
         input.employeeId,
         subtotalCents,
         discountPercent,

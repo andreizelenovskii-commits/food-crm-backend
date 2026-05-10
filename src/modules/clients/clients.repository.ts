@@ -220,19 +220,6 @@ export async function deleteClient(clientId: number): Promise<boolean> {
     return false;
   }
 
-  const orderResult = await pool.query<{ count: string }>(
-    `
-      SELECT COUNT(*) AS count
-      FROM "Order"
-      WHERE "clientId" = $1
-    `,
-    [clientId],
-  );
-
-  if (Number(orderResult.rows[0]?.count ?? 0) > 0) {
-    return false;
-  }
-
   await ensureRecentDatabaseBackup("client-delete");
   const result = await pool.query(
     `
