@@ -5,7 +5,7 @@ import type { CatalogItem } from "@backend/modules/catalog/catalog.types";
 import {
   buildCatalogSlug,
   ensureCatalogPriceListSlot,
-  ensureCatalogTechCardMatches,
+  ensureCatalogTechCardExists,
   mapRowToCatalogItem,
   type CatalogRow,
 } from "@backend/modules/catalog/catalog.repository.shared";
@@ -67,7 +67,7 @@ export async function getCatalogItemById(id: number): Promise<CatalogItem | null
 }
 
 export async function createCatalogItem(input: CatalogItemInput): Promise<CatalogItem> {
-  await ensureCatalogTechCardMatches(input);
+  await ensureCatalogTechCardExists(input);
   await ensureCatalogPriceListSlot(input);
   const slug = buildCatalogSlug(input);
 
@@ -118,7 +118,7 @@ export async function updateCatalogItem(
   id: number,
   input: CatalogItemInput,
 ): Promise<CatalogItem | null> {
-  await ensureCatalogTechCardMatches(input);
+  await ensureCatalogTechCardExists(input);
   await ensureCatalogPriceListSlot(input, id);
   const slug = buildCatalogSlug(input);
 

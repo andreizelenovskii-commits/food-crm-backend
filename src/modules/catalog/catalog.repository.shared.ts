@@ -79,7 +79,7 @@ export function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
   };
 }
 
-export async function ensureCatalogTechCardMatches(input: CatalogItemInput) {
+export async function ensureCatalogTechCardExists(input: CatalogItemInput) {
   const result = await pool.query<{ id: number; category: string; pizzaSize: string | null }>(
     `
       SELECT "id", "category", "pizzaSize"
@@ -93,14 +93,6 @@ export async function ensureCatalogTechCardMatches(input: CatalogItemInput) {
 
   if (!techCard) {
     throw new ValidationError("Выбранная технологическая карта не найдена");
-  }
-
-  if (techCard.category !== input.category) {
-    throw new ValidationError("Категория позиции должна совпадать с категорией техкарты");
-  }
-
-  if (input.category === "Пиццы" && !techCard.pizzaSize) {
-    throw new ValidationError("Для пиццы выбери техкарту с размером 24 см, 26 см или 30 см");
   }
 }
 

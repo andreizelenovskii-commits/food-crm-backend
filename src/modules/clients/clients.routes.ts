@@ -25,6 +25,7 @@ const CLIENT_FIELDS = [
   "addressApartment",
   "addressesJson",
   "notes",
+  "loyaltyLevelOverride",
 ];
 
 export async function registerClientsRoutes(app: FastifyInstance) {

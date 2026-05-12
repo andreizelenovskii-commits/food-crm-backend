@@ -36,6 +36,7 @@ model Client {
   birthDate DateTime?
   address   String?
   notes     String?
+  loyaltyLevelOverride String?
   createdAt DateTime @default(now())
   orders    Order[]
 }

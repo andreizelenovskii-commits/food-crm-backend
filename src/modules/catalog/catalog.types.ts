@@ -1,6 +1,19 @@
 export const CATALOG_PRICE_LIST_TYPES = ["CLIENT", "INTERNAL"] as const;
+export const CATALOG_SITE_CATEGORIES = [
+  "Пицца",
+  "Роллы",
+  "Фастфуд",
+  "Пасты и салаты",
+  "Паназиатская кухня",
+  "Напитки",
+  "Десерты",
+  "Детское меню",
+  "Комбо",
+  "Сеты",
+] as const;
 
 export type CatalogPriceListType = (typeof CATALOG_PRICE_LIST_TYPES)[number];
+export type CatalogSiteCategory = (typeof CATALOG_SITE_CATEGORIES)[number];
 
 export const CATALOG_PRICE_LIST_LABELS: Record<CatalogPriceListType, string> = {
   CLIENT: "Клиентский прайс",

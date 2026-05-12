@@ -21,6 +21,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       id: number;
       name: string;
       type: "CLIENT" | "ORGANIZATION";
+      loyaltyLevelOverride: ReturnType<typeof resolveLoyaltyLevel>;
       totalSpentCents: string;
     }>(
       `
@@ -28,11 +29,12 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           c."id",
           c."name",
           c."type",
+          c."loyaltyLevelOverride",
           COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
         FROM "Client" c
         LEFT JOIN "Order" o ON o."clientId" = c."id"
         WHERE c."id" = $1
-        GROUP BY c."id", c."name", c."type"
+        GROUP BY c."id", c."name", c."type", c."loyaltyLevelOverride"
         LIMIT 1
       `,
       [input.clientId],
@@ -96,7 +98,10 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
     const currentClient = clientExists.rows[0];
     const discountPercent =
       !input.isInternal && currentClient.type === "CLIENT"
-        ? getLoyaltyDiscountPercent(resolveLoyaltyLevel(Number(currentClient.totalSpentCents ?? 0)))
+        ? getLoyaltyDiscountPercent(
+            currentClient.loyaltyLevelOverride ??
+              resolveLoyaltyLevel(Number(currentClient.totalSpentCents ?? 0)),
+          )
         : 0;
     const discountCents = Math.round((subtotalCents * discountPercent) / 100);
     const totalCents = Math.max(subtotalCents - discountCents, 0) + deliveryFeeCents;

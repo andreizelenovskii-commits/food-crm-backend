@@ -26,9 +26,9 @@ async function main() {
 
   await pool.query(
     `
-      INSERT INTO "User" ("email", "password", "role")
+      INSERT INTO "User" ("phone", "password", "role")
       VALUES ($1, $2, $3)
-      ON CONFLICT ("email")
+      ON CONFLICT ("phone")
       DO UPDATE SET
         "password" = EXCLUDED."password",
         "role" = EXCLUDED."role"
