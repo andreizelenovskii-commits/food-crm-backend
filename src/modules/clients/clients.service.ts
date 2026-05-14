@@ -2,6 +2,7 @@ import {
   createClient,
   deleteClient,
   getClientById,
+  getClientByPhone,
   getAllClients,
   updateClient,
 } from "@backend/modules/clients/clients.repository";
@@ -23,6 +24,11 @@ export async function addClient(input: CreateClientInput): Promise<Client> {
 
 export async function fetchClientById(clientId: number): Promise<Client | null> {
   const client = await getClientById(clientId);
+  return client ? attachLoyaltyToClient(client) : null;
+}
+
+export async function fetchClientByPhone(phone: string): Promise<Client | null> {
+  const client = await getClientByPhone(phone);
   return client ? attachLoyaltyToClient(client) : null;
 }
 

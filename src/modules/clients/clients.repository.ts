@@ -1,6 +1,7 @@
 import { pool } from "@backend/shared/db/pool";
 import { ensureRecentDatabaseBackup } from "@backend/shared/db/backup";
 import { ValidationError } from "@backend/shared/errors/app-error";
+import { normalizeRussianPhoneForStorage } from "@backend/shared/lib/phone";
 import type { Client } from "@backend/modules/clients/clients.types";
 import type {
   CreateClientInput,
@@ -122,6 +123,52 @@ export async function getClientById(clientId: number): Promise<Client | null> {
       LIMIT 1
     `,
     [clientId],
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return mapRowToClient(result.rows[0]);
+}
+
+export async function getClientByPhone(phone: string): Promise<Client | null> {
+  const normalizedPhone = normalizeRussianPhoneForStorage(phone.trim());
+
+  if (!normalizedPhone) {
+    return null;
+  }
+
+  const result = await pool.query<ClientRow>(
+    `
+      SELECT
+        c."id",
+        c."name",
+        c."type",
+        c."email",
+        c."phone",
+        c."birthDate",
+        c."address",
+        c."notes",
+        c."createdAt",
+        COUNT(o."id") AS "ordersCount",
+        COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
+      FROM "Client" c
+      LEFT JOIN "Order" o ON o."clientId" = c."id"
+      WHERE c."phone" = $1
+      GROUP BY
+        c."id",
+        c."name",
+        c."type",
+        c."email",
+        c."phone",
+        c."birthDate",
+        c."address",
+        c."notes",
+        c."createdAt"
+      LIMIT 1
+    `,
+    [normalizedPhone],
   );
 
   if (!result.rowCount) {
