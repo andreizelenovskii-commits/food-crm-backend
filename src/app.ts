@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import { backendEnv } from "@backend/config/env";
 import { registerErrorHandler } from "@backend/lib/error-handler";
 import { registerAuthRoutes } from "@backend/modules/auth/auth.routes";
+import { registerPublicAuthRoutes } from "@backend/modules/public-auth/public-auth.routes";
 import { registerDashboardRoutes } from "@backend/modules/dashboard/dashboard.routes";
 import { registerClientsRoutes } from "@backend/modules/clients/clients.routes";
 import { registerEmployeesRoutes } from "@backend/modules/employees/employees.routes";
@@ -44,6 +45,7 @@ export async function createApp() {
   }));
 
   await registerAuthRoutes(app);
+  await registerPublicAuthRoutes(app);
   await registerAccessRoutes(app);
   await registerDashboardRoutes(app);
   await registerLoyaltyRoutes(app);

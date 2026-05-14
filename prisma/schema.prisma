@@ -41,6 +41,19 @@ model Client {
   orders    Order[]
 }
 
+model PhoneVerificationCode {
+  id         Int       @id @default(autoincrement())
+  phone      String
+  purpose    String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, purpose, createdAt])
+}
+
 model Product {
   id          Int      @id @default(autoincrement())
   name        String

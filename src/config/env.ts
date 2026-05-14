@@ -10,9 +10,14 @@ type BackendEnv = {
   databaseUrl: string;
   sessionSecret: string;
   sessionCookieName: string;
+  clientSessionCookieName: string;
   sessionCookieDomain: string | null;
   sessionTtlDays: number;
   corsOrigins: string[];
+  smsAeroEmail: string | null;
+  smsAeroApiKey: string | null;
+  smsAeroSign: string;
+  smsAeroEnabled: boolean;
 };
 
 function getRequiredEnv(name: string) {
@@ -56,13 +61,26 @@ function parsePositiveInteger(value: string | null, fallback: number, name: stri
   return parsed;
 }
 
+function parseBoolean(value: string | null, fallback: boolean) {
+  if (value === null) {
+    return fallback;
+  }
+
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
 export const backendEnv: BackendEnv = {
   host: getOptionalEnv("HOST") ?? "0.0.0.0",
   port: parsePort(getOptionalEnv("PORT")),
   databaseUrl: getRequiredEnv("DATABASE_URL"),
   sessionSecret: getOptionalEnv("BACKEND_SESSION_SECRET") ?? getRequiredEnv("SESSION_SECRET"),
   sessionCookieName: getOptionalEnv("BACKEND_SESSION_COOKIE_NAME") ?? "food_crm_api_session",
+  clientSessionCookieName: getOptionalEnv("BACKEND_CLIENT_SESSION_COOKIE_NAME") ?? "food_crm_client_session",
   sessionCookieDomain: getOptionalEnv("BACKEND_SESSION_COOKIE_DOMAIN"),
   sessionTtlDays: parsePositiveInteger(getOptionalEnv("BACKEND_SESSION_TTL_DAYS"), 30, "BACKEND_SESSION_TTL_DAYS"),
   corsOrigins: parseCorsOrigins(getOptionalEnv("BACKEND_CORS_ORIGIN")),
+  smsAeroEmail: getOptionalEnv("SMSAERO_EMAIL"),
+  smsAeroApiKey: getOptionalEnv("SMSAERO_API_KEY"),
+  smsAeroSign: getOptionalEnv("SMSAERO_SIGN") ?? "SMS Aero",
+  smsAeroEnabled: parseBoolean(getOptionalEnv("SMSAERO_ENABLED"), true),
 };

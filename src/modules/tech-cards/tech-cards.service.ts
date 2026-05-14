@@ -1,13 +1,13 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
 import {
   createTechCard,
-  deleteTechCard,
   getTechCardById,
   getTechCardOptions,
   getTechCardProductOptions,
   getTechCards,
   updateTechCard,
 } from "@backend/modules/tech-cards/tech-cards.repository";
+import { deleteTechCard } from "@backend/modules/tech-cards/tech-cards.repository.delete";
 import type { TechCardInput } from "@backend/modules/tech-cards/tech-cards.validation";
 
 export async function fetchTechCards() {
