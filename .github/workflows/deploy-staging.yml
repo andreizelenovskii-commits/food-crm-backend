@@ -97,6 +97,7 @@ jobs:
             echo "BACKEND_SESSION_COOKIE_NAME=food_crm_staging_api_session"
           } >> "$APP_DIR/shared/.env"
           ln -sfn "$APP_DIR/shared/.env" "$RELEASE_DIR/.env"
+          sudo -n -u postgres createdb food_crm_staging --owner=food_crm_user || true
           cd "$RELEASE_DIR"
           npm ci
           npm run db:deploy
