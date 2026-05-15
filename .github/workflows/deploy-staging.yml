@@ -59,7 +59,7 @@ jobs:
             --exclude='.env.*' \
             -czf - . | "${SSH[@]}" "tar -xzf - -C '$RELEASE_DIR'"
 
-      - name: Migrate and activate release
+      - name: Prepare staging environment
         run: |
           set -euo pipefail
           SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
@@ -100,17 +100,50 @@ jobs:
           } >> "$APP_DIR/shared/.env"
           ln -sfn "$APP_DIR/shared/.env" "$RELEASE_DIR/.env"
           sudo -n -u postgres createdb food_crm_staging --owner=food_crm_user || true
+          REMOTE
+
+      - name: Install release dependencies
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
           cd "$RELEASE_DIR"
           npm ci
+          REMOTE
+
+      - name: Deploy database migrations
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$RELEASE_DIR"
           npm run db:deploy
+          REMOTE
+
+      - name: Activate backend process
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "APP_DIR='$APP_DIR' RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
           ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
           cd "$APP_DIR/current"
           pm2 delete food-crm-backend-staging || true
           pm2 start ecosystem.staging.config.cjs --only food-crm-backend-staging --update-env
+          pm2 save
+          REMOTE
+
+      - name: Verify backend health
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "APP_DIR='$APP_DIR' RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
           sleep 5
           curl -fsS http://127.0.0.1:4100/api/v1/health >/dev/null
           UPLOAD_STATUS="$(curl -sS -o /tmp/food-crm-staging-upload-route-check.txt -w '%{http_code}' -X POST http://127.0.0.1:4100/api/v1/catalog/uploads)"
           test "$UPLOAD_STATUS" != "404"
-          pm2 save
           find "$APP_DIR/releases" -mindepth 1 -maxdepth 1 -type d ! -samefile "$RELEASE_DIR" -printf '%T@ %p\n' | sort -nr | tail -n +6 | cut -d' ' -f2- | xargs -r rm -rf
           REMOTE
