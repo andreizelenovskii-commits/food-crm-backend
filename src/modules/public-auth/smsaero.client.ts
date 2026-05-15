@@ -1,8 +1,10 @@
 import { backendEnv } from "@backend/config/env";
+import { ValidationError } from "@backend/shared/errors/app-error";
 
 type SmsAeroResponse = {
   success?: boolean;
   message?: string;
+  data?: unknown;
 };
 
 export async function sendSmsCode(phone: string, code: string) {
@@ -31,6 +33,13 @@ export async function sendSmsCode(phone: string, code: string) {
   const payload = await response.json().catch(() => null) as SmsAeroResponse | null;
 
   if (!response.ok || payload?.success === false) {
-    throw new Error(payload?.message ?? "Не удалось отправить SMS-код");
+    console.error("[smsaero] send failed", {
+      status: response.status,
+      payload,
+    });
+    throw new ValidationError(
+      payload?.message ??
+        "SMS Aero не отправил код. Проверьте API-ключ, подпись отправителя и баланс.",
+    );
   }
 }
