@@ -82,7 +82,7 @@ jobs:
               echo "ERROR: нет DATABASE_URL в $PROD_APP_DIR/shared/.env"
               exit 1
             fi
-            STAGING_DATABASE_URL="$(printf '%s' "$PROD_DATABASE_URL" | sed -E 's#(^.*)/([^/?]+)(\\?.*)?$#\\1/food_crm_staging\\3#')"
+            STAGING_DATABASE_URL="$(printf '%s' "$PROD_DATABASE_URL" | sed -E 's#(^.*)/([^/?]+)(\?.*)?$#\1/food_crm_staging\3#')"
             if [ "$STAGING_DATABASE_URL" = "$PROD_DATABASE_URL" ]; then
               echo "ERROR: не удалось получить URL для food_crm_staging из prod DATABASE_URL."
               exit 1
