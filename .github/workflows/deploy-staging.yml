@@ -75,18 +75,15 @@ jobs:
           fi
           test -f "$APP_DIR/shared/.env"
 
-          STAGING_DATABASE_URL="$(grep -E '^DATABASE_URL=.*food_crm_staging' "$APP_DIR/shared/.env" | cut -d '=' -f2- || true)"
-          if [ -z "$STAGING_DATABASE_URL" ]; then
-            PROD_DATABASE_URL="$(grep -E '^DATABASE_URL=' "$PROD_APP_DIR/shared/.env" | cut -d '=' -f2-)"
-            if [ -z "$PROD_DATABASE_URL" ]; then
-              echo "ERROR: нет DATABASE_URL в $PROD_APP_DIR/shared/.env"
-              exit 1
-            fi
-            STAGING_DATABASE_URL="$(printf '%s' "$PROD_DATABASE_URL" | sed -E 's#(^.*)/([^/?]+)(\?.*)?$#\1/food_crm_staging\3#')"
-            if [ "$STAGING_DATABASE_URL" = "$PROD_DATABASE_URL" ]; then
-              echo "ERROR: не удалось получить URL для food_crm_staging из prod DATABASE_URL."
-              exit 1
-            fi
+          PROD_DATABASE_URL="$(grep -E '^DATABASE_URL=' "$PROD_APP_DIR/shared/.env" | cut -d '=' -f2-)"
+          if [ -z "$PROD_DATABASE_URL" ]; then
+            echo "ERROR: нет DATABASE_URL в $PROD_APP_DIR/shared/.env"
+            exit 1
+          fi
+          STAGING_DATABASE_URL="$(printf '%s' "$PROD_DATABASE_URL" | sed -E 's#(^.*)/([^/?]+)(\?.*)?$#\1/food_crm_staging\3#')"
+          if [ "$STAGING_DATABASE_URL" = "$PROD_DATABASE_URL" ]; then
+            echo "ERROR: не удалось получить URL для food_crm_staging из prod DATABASE_URL."
+            exit 1
           fi
 
           grep -v -E '^(DATABASE_URL|PORT|BACKEND_CORS_ORIGIN|BACKEND_SESSION_COOKIE_DOMAIN|BACKEND_SESSION_COOKIE_NAME)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
