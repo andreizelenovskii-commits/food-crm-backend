@@ -119,7 +119,12 @@ jobs:
           "${SSH[@]}" "RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$RELEASE_DIR"
-          npm run db:deploy
+          LOG_FILE=/tmp/food-crm-staging-db-deploy.log
+          if ! npm run db:deploy 2>&1 | tee "$LOG_FILE"; then
+            SUMMARY="$(tail -n 30 "$LOG_FILE" | sed -E 's#(postgres(ql)?://)[^[:space:]]+#\1***#g' | tr '\n' ' ' | cut -c1-900)"
+            echo "::error title=Prisma migrate deploy failed::$SUMMARY"
+            exit 1
+          fi
           REMOTE
 
       - name: Activate backend process
