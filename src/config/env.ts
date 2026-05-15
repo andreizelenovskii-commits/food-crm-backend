@@ -45,10 +45,20 @@ function parsePort(value: string | null) {
 }
 
 function parseCorsOrigins(value: string | null) {
-  return (value ?? "http://localhost:3000,http://127.0.0.1:3000")
+  const defaultOrigins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://crm.crmandromeda.ru",
+    "https://crmandromeda.ru",
+    "https://www.crmandromeda.ru",
+    "https://dev.crm.crmandromeda.ru",
+  ];
+  const configuredOrigins = (value ?? "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+
+  return Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
 }
 
 function parsePositiveInteger(value: string | null, fallback: number, name: string) {
