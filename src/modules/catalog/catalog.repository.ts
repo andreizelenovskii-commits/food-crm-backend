@@ -1,82 +1,14 @@
 import { pool } from "@backend/shared/db/pool";
 import { ensureRecentDatabaseBackup } from "@backend/shared/db/backup";
-import { ValidationError } from "@backend/shared/errors/app-error";
-import type {
-  CatalogItem,
-  CatalogPriceListType,
-} from "@backend/modules/catalog/catalog.types";
 import type { CatalogItemInput } from "@backend/modules/catalog/catalog.validation";
-
-type CatalogRow = {
-  id: number;
-  name: string;
-  slug: string;
-  category: string | null;
-  pizzaSize: string | null;
-  description: string | null;
-  imageUrl: string | null;
-  priceCents: number;
-  isPublished: boolean;
-  createdAt: Date;
-  technologicalCardId: number;
-  technologicalCardName: string;
-};
-
-function slugifyCatalogItemName(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9а-яё]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-");
-}
-
-function buildCatalogSlug(input: Pick<CatalogItemInput, "name" | "priceListType" | "technologicalCardId">) {
-  const baseSlug = slugifyCatalogItemName(input.name) || "catalog-item";
-
-  return `${baseSlug}-${input.priceListType.toLowerCase()}-${input.technologicalCardId}`;
-}
-
-function mapPriceListType(isPublished: boolean): CatalogPriceListType {
-  return isPublished ? "CLIENT" : "INTERNAL";
-}
-
-function normalizeCatalogImageUrl(imageUrl: string | null) {
-  if (!imageUrl) {
-    return null;
-  }
-
-  if (imageUrl.startsWith("/uploads/catalog/")) {
-    return imageUrl;
-  }
-
-  try {
-    const url = new URL(imageUrl);
-
-    if (url.pathname.startsWith("/uploads/catalog/")) {
-      return url.pathname;
-    }
-  } catch {
-    return imageUrl;
-  }
-
-  return imageUrl;
-}
-
-function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
-  return {
-    id: row.id,
-    name: row.name,
-    priceListType: mapPriceListType(row.isPublished),
-    category: row.category,
-    pizzaSize: row.pizzaSize,
-    description: row.description,
-    imageUrl: normalizeCatalogImageUrl(row.imageUrl),
-    priceCents: row.priceCents,
-    createdAt: row.createdAt.toISOString(),
-    technologicalCardId: row.technologicalCardId,
-    technologicalCardName: row.technologicalCardName,
-  };
-}
+import type { CatalogItem } from "@backend/modules/catalog/catalog.types";
+import {
+  buildCatalogSlug,
+  ensureCatalogPriceListSlot,
+  ensureCatalogTechCardExists,
+  mapRowToCatalogItem,
+  type CatalogRow,
+} from "@backend/modules/catalog/catalog.repository.shared";
 
 export async function getCatalogItems(): Promise<CatalogItem[]> {
   const result = await pool.query<CatalogRow>(
@@ -135,45 +67,9 @@ export async function getCatalogItemById(id: number): Promise<CatalogItem | null
 }
 
 export async function createCatalogItem(input: CatalogItemInput): Promise<CatalogItem> {
-  const techCardResult = await pool.query<{ id: number; category: string; pizzaSize: string | null }>(
-    `
-      SELECT "id", "category", "pizzaSize"
-      FROM "TechnologicalCard"
-      WHERE "id" = $1
-      LIMIT 1
-    `,
-    [input.technologicalCardId],
-  );
-
-  const techCard = techCardResult.rows[0];
-
-  if (!techCard) {
-    throw new ValidationError("Выбранная технологическая карта не найдена");
-  }
-
-  if (techCard.category !== input.category) {
-    throw new ValidationError("Категория позиции должна совпадать с категорией техкарты");
-  }
-
-  if (input.category === "Пиццы" && !techCard.pizzaSize) {
-    throw new ValidationError("Для пиццы выбери техкарту с размером 24 см, 26 см или 30 см");
-  }
-
+  await ensureCatalogTechCardExists(input);
+  await ensureCatalogPriceListSlot(input);
   const slug = buildCatalogSlug(input);
-  const existing = await pool.query<{ id: number }>(
-    `
-      SELECT "id"
-      FROM "CatalogItem"
-      WHERE "technologicalCardId" = $1
-        AND "isPublished" = $2
-      LIMIT 1
-    `,
-    [input.technologicalCardId, input.priceListType === "CLIENT"],
-  );
-
-  if (existing.rowCount) {
-    throw new ValidationError("Эта технологическая карта уже добавлена в выбранный прайс");
-  }
 
   await ensureRecentDatabaseBackup("catalog-item-create");
   const result = await pool.query<CatalogRow>(
@@ -222,46 +118,9 @@ export async function updateCatalogItem(
   id: number,
   input: CatalogItemInput,
 ): Promise<CatalogItem | null> {
-  const techCardResult = await pool.query<{ id: number; category: string; pizzaSize: string | null }>(
-    `
-      SELECT "id", "category", "pizzaSize"
-      FROM "TechnologicalCard"
-      WHERE "id" = $1
-      LIMIT 1
-    `,
-    [input.technologicalCardId],
-  );
-
-  const techCard = techCardResult.rows[0];
-
-  if (!techCard) {
-    throw new ValidationError("Выбранная технологическая карта не найдена");
-  }
-
-  if (techCard.category !== input.category) {
-    throw new ValidationError("Категория позиции должна совпадать с категорией техкарты");
-  }
-
-  if (input.category === "Пиццы" && !techCard.pizzaSize) {
-    throw new ValidationError("Для пиццы выбери техкарту с размером 24 см, 26 см или 30 см");
-  }
-
+  await ensureCatalogTechCardExists(input);
+  await ensureCatalogPriceListSlot(input, id);
   const slug = buildCatalogSlug(input);
-  const existing = await pool.query<{ id: number }>(
-    `
-      SELECT "id"
-      FROM "CatalogItem"
-      WHERE "technologicalCardId" = $1
-        AND "isPublished" = $2
-        AND "id" <> $3
-      LIMIT 1
-    `,
-    [input.technologicalCardId, input.priceListType === "CLIENT", id],
-  );
-
-  if (existing.rowCount) {
-    throw new ValidationError("Эта технологическая карта уже добавлена в выбранный прайс");
-  }
 
   await ensureRecentDatabaseBackup("catalog-item-update");
   const result = await pool.query<CatalogRow>(

@@ -67,7 +67,7 @@ export async function registerEmployeesRoutes(app: FastifyInstance) {
     "/api/v1/employees/:employeeId/access",
     { preHandler: requirePermission("manage_employees") },
     async (request) => {
-      const accessInput = parseIssueEmployeeAccessInput(toFormData(getRequestBody(request), ["email", "password"]));
+      const accessInput = parseIssueEmployeeAccessInput(toFormData(getRequestBody(request), ["phone", "password"]));
       const employee = await issueEmployeeAccessService({
         employeeId: getNumericParam(request, "employeeId"),
         ...accessInput,

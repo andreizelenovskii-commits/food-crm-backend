@@ -37,11 +37,14 @@ function getRequestToken(request: FastifyRequest) {
 
 async function buildAuthUser(payload: {
   userId: number;
-  email: string;
+  phone: string;
+  email?: string;
   role: string;
 }): Promise<AuthenticatedApiUser | null> {
+  const loginId = payload.phone || payload.email || "";
+
   const identity = await resolveSessionUserIdentity(payload.userId, {
-    email: payload.email,
+    phone: loginId,
     role: payload.role,
   });
 
@@ -51,7 +54,7 @@ async function buildAuthUser(payload: {
 
   const user: SessionUser = {
     id: payload.userId,
-    email: identity.email,
+    phone: identity.phone,
     role: identity.role,
     displayName: identity.displayName,
   };

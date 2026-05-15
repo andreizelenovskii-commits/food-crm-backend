@@ -13,6 +13,7 @@ export async function fetchLoyaltySnapshot(): Promise<LoyaltySnapshot> {
   const loyaltyClients = clients
     .filter((client) => client.type === "CLIENT")
     .map(mapClientToLoyaltyClient)
+    .filter((client): client is NonNullable<typeof client> => Boolean(client))
     .sort((left, right) => right.totalSpentCents - left.totalSpentCents);
 
   return {

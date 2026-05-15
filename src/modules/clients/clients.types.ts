@@ -13,6 +13,7 @@ export type Client = {
   birthDate: string | null;
   address: string | null;
   notes: string | null;
+  loyaltyLevelOverride: ClientLoyaltyLevel | null;
   ordersCount: number;
   totalSpentCents: number;
   loyaltyLevel: ClientLoyaltyLevel | null;

@@ -6,6 +6,7 @@ import { authenticateRequest, resolveAuthUser } from "@backend/modules/auth/auth
 import { createApiSessionToken, getSessionMaxAgeSeconds } from "@backend/modules/auth/session-token";
 import { backendEnv } from "@backend/config/env";
 import { getRequestBody, getStringBodyField } from "@backend/lib/request";
+import { parseLoginPhone } from "@backend/lib/phone";
 
 function getRequestIp(headers: Record<string, unknown>, fallback: string) {
   const forwardedFor = headers["x-forwarded-for"];
@@ -47,21 +48,34 @@ function getSessionCookieDomain(request: { hostname: string; headers: Record<str
 export async function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/v1/auth/login", async (request, reply) => {
     const body = getRequestBody(request);
-    const email = getStringBodyField(body, "email");
     const password = getStringBodyField(body, "password");
+    const loginRaw = getStringBodyField(body, "phone") || getStringBodyField(body, "email");
 
-    if (!email || !password) {
-      throw new ValidationError("Укажи email и пароль");
+    if (!loginRaw.trim() || !password) {
+      throw new ValidationError("Укажи номер телефона и пароль");
+    }
+
+    let login: string;
+    try {
+      login = parseLoginPhone(loginRaw);
+    } catch {
+      const legacy = loginRaw.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legacy)) {
+        throw new ValidationError(
+          "Введи номер телефона в формате +7 и ещё 10 цифр или корректный email для входа",
+        );
+      }
+      login = legacy;
     }
 
     const user = await authenticateUser(
-      { email, password },
+      { login, password },
       undefined,
       { ipAddress: getRequestIp(request.headers, request.ip) },
     );
     const session = createApiSessionToken({
       userId: user.id,
-      email: user.email,
+      phone: user.phone,
       role: user.role,
     });
 

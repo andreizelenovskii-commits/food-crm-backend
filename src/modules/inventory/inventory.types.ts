@@ -8,6 +8,7 @@ export const PRODUCT_CATEGORIES = [
   "Морепродукты",
   "Приправы и специи",
   "Упаковка",
+  "Ингредиенты",
 ] as const;
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];

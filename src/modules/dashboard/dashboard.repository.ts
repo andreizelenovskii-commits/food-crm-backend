@@ -73,30 +73,44 @@ export async function getDashboardAggregateData(): Promise<DashboardAggregateDat
   };
 }
 
-export async function getEmployeeDashboardSourceByEmail(
-  email: string,
+export async function getEmployeeDashboardSourceByLogin(
+  login: string,
   monthStart: string,
   monthEnd: string,
 ): Promise<EmployeeDashboardSource | null> {
-  const normalizedEmail = email.trim().toLowerCase();
+  const trimmed = login.trim();
 
-  if (!normalizedEmail) {
+  if (!trimmed) {
     return null;
   }
 
-  const employeeResult = await pool.query<{
-    id: number;
-    role: string;
-    schedule: unknown;
-  }>(
-    `
+  const employeeResult = /^7\d{10}$/.test(trimmed)
+    ? await pool.query<{
+        id: number;
+        role: string;
+        schedule: unknown;
+      }>(
+        `
       SELECT "id", "role", "schedule"
       FROM "Employee"
-      WHERE LOWER("email") = $1
+      WHERE regexp_replace(COALESCE("phone", ''), '\\D', '', 'g') = $1
       LIMIT 1
     `,
-    [normalizedEmail],
-  );
+        [trimmed],
+      )
+    : await pool.query<{
+        id: number;
+        role: string;
+        schedule: unknown;
+      }>(
+        `
+      SELECT "id", "role", "schedule"
+      FROM "Employee"
+      WHERE LOWER(COALESCE("email", '')) = LOWER($1)
+      LIMIT 1
+    `,
+        [trimmed.toLowerCase()],
+      );
 
   const employee = employeeResult.rows[0];
 

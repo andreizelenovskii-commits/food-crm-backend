@@ -1,12 +1,10 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
 import {
+  CATALOG_SITE_CATEGORIES,
   CATALOG_PRICE_LIST_TYPES,
+  type CatalogSiteCategory,
   type CatalogPriceListType,
 } from "@backend/modules/catalog/catalog.types";
-import {
-  TECH_CARD_CATEGORIES,
-  type TechCardCategory,
-} from "@backend/modules/tech-cards/tech-cards.types";
 
 function normalizeInput(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -15,7 +13,7 @@ function normalizeInput(value: FormDataEntryValue | null) {
 export type CatalogItemInput = {
   name: string;
   priceListType: CatalogPriceListType;
-  category: TechCardCategory;
+  category: CatalogSiteCategory;
   description: string | null;
   imageUrl: string;
   priceCents: number;
@@ -52,8 +50,8 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
     throw new ValidationError("Выберите корректный тип прайса");
   }
 
-  if (!TECH_CARD_CATEGORIES.includes(category as TechCardCategory)) {
-    throw new ValidationError("Выберите категорию из списка технологических карт");
+  if (!CATALOG_SITE_CATEGORIES.includes(category as CatalogSiteCategory)) {
+    throw new ValidationError("Выберите категорию сайта из списка");
   }
 
   if (!isValidImageUrl(imageUrl)) {
@@ -67,7 +65,7 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
   return {
     name,
     priceListType: priceListType as CatalogPriceListType,
-    category: category as TechCardCategory,
+    category: category as CatalogSiteCategory,
     description: description || null,
     imageUrl,
     priceCents: Math.round(price * 100),

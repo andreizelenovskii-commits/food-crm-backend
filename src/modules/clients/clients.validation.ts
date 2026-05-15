@@ -5,14 +5,36 @@ import {
 } from "@backend/shared/lib/phone";
 import {
   CLIENT_TYPES,
+  type ClientLoyaltyLevel,
   type ClientType,
 } from "@backend/modules/clients/clients.types";
+import { LOYALTY_LEVELS } from "@backend/modules/loyalty/loyalty.types";
 
 function normalizeInput(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
 
 function buildClientAddress(formData: FormData) {
+  const addressesJson = normalizeInput(formData.get("addressesJson"));
+
+  if (addressesJson) {
+    try {
+      const parsed = JSON.parse(addressesJson) as unknown;
+
+      if (Array.isArray(parsed)) {
+        const addresses = parsed
+          .map((address) => String(address ?? "").trim())
+          .filter(Boolean);
+
+        if (addresses.length > 0) {
+          return addresses.join("\n");
+        }
+      }
+    } catch {
+      throw new ValidationError("Проверь адреса клиента");
+    }
+  }
+
   const residenceType = normalizeInput(formData.get("addressResidenceType")) || "APARTMENT";
   const city = normalizeInput(formData.get("addressCity"));
   const street = normalizeInput(formData.get("addressStreet"));
@@ -42,12 +64,25 @@ export type CreateClientInput = {
   birthDate: string | null;
   address: string | null;
   notes: string | null;
+  loyaltyLevelOverride: ClientLoyaltyLevel | null;
 };
 
 export type UpdateClientInput = CreateClientInput;
 
 function isClientType(value: string): value is ClientType {
   return CLIENT_TYPES.includes(value as ClientType);
+}
+
+function parseLoyaltyLevelOverride(value: string): ClientLoyaltyLevel | null {
+  if (!value || value === "AUTO") {
+    return null;
+  }
+
+  if (!LOYALTY_LEVELS.includes(value as ClientLoyaltyLevel)) {
+    throw new ValidationError("Выберите корректный уровень лояльности");
+  }
+
+  return value as ClientLoyaltyLevel;
 }
 
 export function parseCreateClientInput(formData: FormData): CreateClientInput {
@@ -59,6 +94,7 @@ export function parseCreateClientInput(formData: FormData): CreateClientInput {
   const birthDateStr = normalizeInput(formData.get("birthDate"));
   const address = buildClientAddress(formData);
   const notes = normalizeInput(formData.get("notes"));
+  const loyaltyLevelOverride = parseLoyaltyLevelOverride(normalizeInput(formData.get("loyaltyLevelOverride")));
 
   if (!name || !phone) {
     throw new ValidationError("Заполните имя и телефон");
@@ -103,6 +139,7 @@ export function parseCreateClientInput(formData: FormData): CreateClientInput {
     birthDate: type === "CLIENT" ? birthDate : null,
     address,
     notes: notes || null,
+    loyaltyLevelOverride: type === "CLIENT" ? loyaltyLevelOverride : null,
   };
 }
 

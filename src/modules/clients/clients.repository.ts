@@ -1,6 +1,7 @@
 import { pool } from "@backend/shared/db/pool";
 import { ensureRecentDatabaseBackup } from "@backend/shared/db/backup";
 import { ValidationError } from "@backend/shared/errors/app-error";
+import { normalizeRussianPhoneForStorage } from "@backend/shared/lib/phone";
 import type { Client } from "@backend/modules/clients/clients.types";
 import type {
   CreateClientInput,
@@ -16,6 +17,7 @@ type ClientRow = {
   birthDate: Date | null;
   address: string | null;
   notes: string | null;
+  loyaltyLevelOverride: Client["loyaltyLevelOverride"];
   ordersCount?: string;
   totalSpentCents?: string;
   createdAt: Date;
@@ -38,6 +40,7 @@ function mapRowToClient(row: ClientRow): Client {
     birthDate: row.birthDate ? formatDateOnly(row.birthDate) : null,
     address: row.address,
     notes: row.notes,
+    loyaltyLevelOverride: row.loyaltyLevelOverride,
     ordersCount: Number(row.ordersCount ?? 0),
     totalSpentCents: Number(row.totalSpentCents ?? 0),
     loyaltyLevel: null,
@@ -59,6 +62,7 @@ export async function getAllClients(): Promise<Client[]> {
         c."birthDate",
         c."address",
         c."notes",
+        c."loyaltyLevelOverride",
         c."createdAt",
         COUNT(o."id") AS "ordersCount",
         COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
@@ -73,6 +77,7 @@ export async function getAllClients(): Promise<Client[]> {
         c."birthDate",
         c."address",
         c."notes",
+        c."loyaltyLevelOverride",
         c."createdAt"
       ORDER BY c."createdAt" DESC
     `,
@@ -97,6 +102,7 @@ export async function getClientById(clientId: number): Promise<Client | null> {
         c."birthDate",
         c."address",
         c."notes",
+        c."loyaltyLevelOverride",
         c."createdAt",
         COUNT(o."id") AS "ordersCount",
         COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
@@ -112,10 +118,57 @@ export async function getClientById(clientId: number): Promise<Client | null> {
         c."birthDate",
         c."address",
         c."notes",
+        c."loyaltyLevelOverride",
         c."createdAt"
       LIMIT 1
     `,
     [clientId],
+  );
+
+  if (!result.rowCount) {
+    return null;
+  }
+
+  return mapRowToClient(result.rows[0]);
+}
+
+export async function getClientByPhone(phone: string): Promise<Client | null> {
+  const normalizedPhone = normalizeRussianPhoneForStorage(phone.trim());
+
+  if (!normalizedPhone) {
+    return null;
+  }
+
+  const result = await pool.query<ClientRow>(
+    `
+      SELECT
+        c."id",
+        c."name",
+        c."type",
+        c."email",
+        c."phone",
+        c."birthDate",
+        c."address",
+        c."notes",
+        c."createdAt",
+        COUNT(o."id") AS "ordersCount",
+        COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
+      FROM "Client" c
+      LEFT JOIN "Order" o ON o."clientId" = c."id"
+      WHERE c."phone" = $1
+      GROUP BY
+        c."id",
+        c."name",
+        c."type",
+        c."email",
+        c."phone",
+        c."birthDate",
+        c."address",
+        c."notes",
+        c."createdAt"
+      LIMIT 1
+    `,
+    [normalizedPhone],
   );
 
   if (!result.rowCount) {
@@ -130,9 +183,9 @@ export async function createClient(input: CreateClientInput): Promise<Client> {
     await ensureRecentDatabaseBackup("client-create");
     const result = await pool.query<ClientRow>(
       `
-        INSERT INTO "Client" ("name", "type", "email", "phone", "birthDate", "address", "notes")
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING "id", "name", "type", "email", "phone", "birthDate", "address", "notes", "createdAt"
+        INSERT INTO "Client" ("name", "type", "email", "phone", "birthDate", "address", "notes", "loyaltyLevelOverride")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING "id", "name", "type", "email", "phone", "birthDate", "address", "notes", "loyaltyLevelOverride", "createdAt"
       `,
       [
         input.name,
@@ -142,6 +195,7 @@ export async function createClient(input: CreateClientInput): Promise<Client> {
         input.birthDate,
         input.address,
         input.notes,
+        input.loyaltyLevelOverride,
       ],
     );
 
@@ -180,9 +234,10 @@ export async function updateClient(
           "phone" = $5,
           "birthDate" = $6,
           "address" = $7,
-          "notes" = $8
+          "notes" = $8,
+          "loyaltyLevelOverride" = $9
         WHERE "id" = $1
-        RETURNING "id", "name", "type", "email", "phone", "birthDate", "address", "notes", "createdAt"
+        RETURNING "id", "name", "type", "email", "phone", "birthDate", "address", "notes", "loyaltyLevelOverride", "createdAt"
       `,
       [
         clientId,
@@ -193,6 +248,7 @@ export async function updateClient(
         input.birthDate,
         input.address,
         input.notes,
+        input.loyaltyLevelOverride,
       ],
     );
 
@@ -217,19 +273,6 @@ export async function updateClient(
 
 export async function deleteClient(clientId: number): Promise<boolean> {
   if (!Number.isInteger(clientId) || clientId <= 0) {
-    return false;
-  }
-
-  const orderResult = await pool.query<{ count: string }>(
-    `
-      SELECT COUNT(*) AS count
-      FROM "Order"
-      WHERE "clientId" = $1
-    `,
-    [clientId],
-  );
-
-  if (Number(orderResult.rows[0]?.count ?? 0) > 0) {
     return false;
   }
 

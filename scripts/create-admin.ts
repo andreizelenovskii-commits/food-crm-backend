@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { hashPassword, assertStrongPassword } from "@backend/modules/auth/auth.password";
 import { pool } from "@backend/shared/db/pool";
+import { parseLoginPhone } from "@backend/lib/phone";
 
 function getRequiredEnv(name: string) {
   const value = process.env[name]?.trim();
@@ -13,25 +14,29 @@ function getRequiredEnv(name: string) {
 }
 
 async function main() {
-  const email = getRequiredEnv("ADMIN_EMAIL").toLowerCase();
   const password = getRequiredEnv("ADMIN_PASSWORD");
   const role = process.env.ADMIN_ROLE?.trim() || "admin";
+
+  const login =
+    process.env.ADMIN_PHONE?.trim()
+      ? parseLoginPhone(process.env.ADMIN_PHONE)
+      : getRequiredEnv("ADMIN_EMAIL").trim().toLowerCase();
 
   assertStrongPassword(password);
 
   await pool.query(
     `
-      INSERT INTO "User" ("email", "password", "role")
+      INSERT INTO "User" ("phone", "password", "role")
       VALUES ($1, $2, $3)
-      ON CONFLICT ("email")
+      ON CONFLICT ("phone")
       DO UPDATE SET
         "password" = EXCLUDED."password",
         "role" = EXCLUDED."role"
     `,
-    [email, hashPassword(password, { validateStrength: true }), role],
+    [login, hashPassword(password, { validateStrength: true }), role],
   );
 
-  console.log(`Admin user is ready: ${email}`);
+  console.log(`Admin user is ready: ${login}`);
 }
 
 main()

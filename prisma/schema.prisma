@@ -21,7 +21,7 @@ enum ClientType {
 
 model User {
   id        Int      @id @default(autoincrement())
-  email     String   @unique
+  phone     String   @unique
   password  String
   role      String   @default("admin")
   createdAt DateTime @default(now())
@@ -36,8 +36,22 @@ model Client {
   birthDate DateTime?
   address   String?
   notes     String?
+  loyaltyLevelOverride String?
   createdAt DateTime @default(now())
   orders    Order[]
+}
+
+model PhoneVerificationCode {
+  id         Int       @id @default(autoincrement())
+  phone      String
+  purpose    String
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, purpose, createdAt])
 }
 
 model Product {
@@ -68,6 +82,7 @@ model Employee {
   monthlyHours Int?     // Рассчитанные часы работы за месяц
   birthDate    DateTime?
   hireDate     DateTime?
+  passwordUpdatedAt DateTime?
   createdAt    DateTime @default(now())
   orders       Order[]
   adjustments  EmployeeAdjustment[]
@@ -96,8 +111,10 @@ model Order {
   id          Int         @id @default(autoincrement())
   status      OrderStatus @default(SENT_TO_KITCHEN)
   isInternal  Boolean     @default(false)
-  client      Client      @relation(fields: [clientId], references: [id])
-  clientId    Int
+  client      Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId    Int?
+  clientNameSnapshot String
+  clientTypeSnapshot ClientType
   employee    Employee    @relation(fields: [employeeId], references: [id])
   employeeId  Int
   subtotalCents Int
@@ -174,8 +191,8 @@ model InventorySessionItem {
   id                 Int              @id @default(autoincrement())
   inventorySession   InventorySession @relation(fields: [inventorySessionId], references: [id])
   inventorySessionId Int
-  product            Product          @relation(fields: [productId], references: [id])
-  productId          Int
+  product            Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId          Int?
   productName        String
   productCategory    String?
   productUnit        String

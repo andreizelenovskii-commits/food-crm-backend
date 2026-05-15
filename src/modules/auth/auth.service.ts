@@ -26,24 +26,24 @@ export async function authenticateUser(
     ipAddress?: string;
   },
 ): Promise<SessionUser> {
-  if (!input.email || !input.password) {
+  if (!input.login || !input.password) {
     throw new ValidationError("Некорректные данные для входа");
   }
 
   const ipAddress = requestMeta?.ipAddress?.trim() || "unknown";
-  assertCanAttemptLogin(input.email, ipAddress);
+  assertCanAttemptLogin(input.login, ipAddress);
 
-  const user = await dependencies.users.findByEmail(input.email);
+  const user = await dependencies.users.findByLoginKey(input.login);
   const passwordVerification = user
     ? verifyPassword(input.password, user.passwordHash)
     : { valid: false, needsRehash: false };
 
   if (!user || !passwordVerification.valid) {
-    recordFailedLoginAttempt(input.email, ipAddress);
-    throw new AuthenticationError("Неверный email или пароль");
+    recordFailedLoginAttempt(input.login, ipAddress);
+    throw new AuthenticationError("Неверный телефон или пароль");
   }
 
-  clearFailedLoginAttempts(input.email, ipAddress);
+  clearFailedLoginAttempts(input.login, ipAddress);
 
   if (passwordVerification.needsRehash) {
     await dependencies.users.updatePasswordHash(user.id, hashPassword(input.password));
@@ -51,7 +51,7 @@ export async function authenticateUser(
 
   return {
     id: user.id,
-    email: user.email,
+    phone: user.phone,
     role: user.role,
   };
 }

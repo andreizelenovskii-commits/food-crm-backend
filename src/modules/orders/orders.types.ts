@@ -22,7 +22,7 @@ export type OrderListItem = {
   id: number;
   status: OrderStatus;
   isInternal: boolean;
-  clientId: number;
+  clientId: number | null;
   clientName: string;
   clientType: "CLIENT" | "ORGANIZATION";
   employeeId: number;

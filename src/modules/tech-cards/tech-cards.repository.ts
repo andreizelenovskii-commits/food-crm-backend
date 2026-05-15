@@ -12,8 +12,9 @@ import {
   TECH_CARD_CATEGORIES,
   TECH_CARD_PIZZA_SIZES,
 } from "@backend/modules/tech-cards/tech-cards.types";
+import { insertTechCardIngredients } from "@backend/modules/tech-cards/tech-cards.repository.ingredients";
+import { syncIngredientTechCardProduct } from "@backend/modules/tech-cards/tech-cards.repository.product-sync";
 import type { TechCardInput } from "@backend/modules/tech-cards/tech-cards.validation";
-
 type TechCardRow = {
   id: number;
   name: string;
@@ -202,47 +203,8 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
       );
 
       const card = cardResult.rows[0];
-      const ingredients: TechCardIngredientItem[] = [];
-
-      for (const ingredient of input.ingredients) {
-        const ingredientResult = await client.query<{
-          id: number;
-          productId: number;
-          productName: string;
-          productUnit: string;
-          quantity: number;
-          unit: "кг" | "шт";
-        }>(
-          `
-            INSERT INTO "TechCardIngredient" ("technologicalCardId", "productId", "quantity", "unit")
-            VALUES (
-              $1,
-              $2,
-              $3,
-              (SELECT CASE WHEN "unit" = 'кг' THEN 'кг' ELSE 'шт' END FROM "Product" WHERE "id" = $2)
-            )
-            RETURNING
-              "id",
-              "productId",
-              (SELECT "name" FROM "Product" WHERE "id" = $2) AS "productName",
-              (SELECT "unit" FROM "Product" WHERE "id" = $2) AS "productUnit",
-              "quantity",
-              "unit"
-          `,
-          [card.id, ingredient.productId, ingredient.quantity],
-        );
-
-        const createdIngredient = ingredientResult.rows[0];
-
-        ingredients.push({
-          id: createdIngredient.id,
-          productId: createdIngredient.productId,
-          productName: createdIngredient.productName,
-          productUnit: createdIngredient.productUnit,
-          quantity: createdIngredient.quantity,
-          unit: createdIngredient.unit,
-        });
-      }
+      const ingredients = await insertTechCardIngredients(client, card.id, input.ingredients);
+      await syncIngredientTechCardProduct(client, input);
 
       return mapTechCardRow(card, ingredients);
     });
@@ -263,9 +225,9 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
 export async function updateTechCard(id: number, input: TechCardInput): Promise<TechCardItem | null> {
   try {
     return await withTransaction(async (client) => {
-      const existingCard = await client.query<{ id: number }>(
+      const existingCard = await client.query<{ id: number; name: string }>(
         `
-          SELECT "id"
+          SELECT "id", "name"
           FROM "TechnologicalCard"
           WHERE "id" = $1
           LIMIT 1
@@ -317,45 +279,8 @@ export async function updateTechCard(id: number, input: TechCardInput): Promise<
         [id],
       );
 
-      const ingredients: TechCardIngredientItem[] = [];
-
-      for (const ingredient of input.ingredients) {
-        const ingredientResult = await client.query<{
-          id: number;
-          productId: number;
-          productName: string;
-          productUnit: string;
-          quantity: number;
-          unit: "кг" | "шт";
-        }>(
-          `
-            INSERT INTO "TechCardIngredient" ("technologicalCardId", "productId", "quantity", "unit")
-            VALUES (
-              $1,
-              $2,
-              $3,
-              (SELECT CASE WHEN "unit" = 'кг' THEN 'кг' ELSE 'шт' END FROM "Product" WHERE "id" = $2)
-            )
-            RETURNING
-              "id",
-              "productId",
-              (SELECT "name" FROM "Product" WHERE "id" = $2) AS "productName",
-              (SELECT "unit" FROM "Product" WHERE "id" = $2) AS "productUnit",
-              "quantity",
-              "unit"
-          `,
-          [id, ingredient.productId, ingredient.quantity],
-        );
-
-        ingredients.push({
-          id: ingredientResult.rows[0].id,
-          productId: ingredientResult.rows[0].productId,
-          productName: ingredientResult.rows[0].productName,
-          productUnit: ingredientResult.rows[0].productUnit,
-          quantity: ingredientResult.rows[0].quantity,
-          unit: ingredientResult.rows[0].unit,
-        });
-      }
+      const ingredients = await insertTechCardIngredients(client, id, input.ingredients);
+      await syncIngredientTechCardProduct(client, input, existingCard.rows[0]?.name);
 
       return mapTechCardRow(cardResult.rows[0], ingredients);
     });

@@ -4,6 +4,7 @@ import { fetchEmployees } from "@backend/modules/employees/employees.service";
 import {
   createOrder,
   getOrderById,
+  getOrdersByClientId,
   getOrders,
   updateOrderStatus,
 } from "@backend/modules/orders/orders.repository";
@@ -15,6 +16,10 @@ import type {
 
 export async function fetchOrders(): Promise<OrderListItem[]> {
   return getOrders();
+}
+
+export async function fetchOrdersByClientId(clientId: number): Promise<OrderListItem[]> {
+  return getOrdersByClientId(clientId);
 }
 
 export async function fetchOrderCreateOptions() {

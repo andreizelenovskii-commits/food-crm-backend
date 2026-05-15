@@ -9,7 +9,7 @@ import {
 export const LOYALTY_LEVEL_CONFIG: LoyaltyLevelConfig[] = [
   {
     level: "BRONZE",
-    minSpentCents: 0,
+    minSpentCents: 5_000_00,
     discountPercent: 3,
     perks: ["Базовая скидка на повторные заказы", "Участие в персональных акциях"],
   },
@@ -33,12 +33,12 @@ export const LOYALTY_LEVEL_CONFIG: LoyaltyLevelConfig[] = [
   },
 ];
 
-export function resolveLoyaltyLevel(totalSpentCents: number): LoyaltyLevel {
+export function resolveLoyaltyLevel(totalSpentCents: number): LoyaltyLevel | null {
   const matched = [...LOYALTY_LEVEL_CONFIG]
     .reverse()
     .find((level) => totalSpentCents >= level.minSpentCents);
 
-  return matched?.level ?? "BRONZE";
+  return matched?.level ?? null;
 }
 
 export function getLoyaltyDiscountPercent(level: LoyaltyLevel | null) {
@@ -69,7 +69,18 @@ export function attachLoyaltyToClient<T extends Client>(client: T): T {
     };
   }
 
-  const loyaltyLevel = resolveLoyaltyLevel(client.totalSpentCents);
+  const loyaltyLevel = client.loyaltyLevelOverride ?? resolveLoyaltyLevel(client.totalSpentCents);
+  if (!loyaltyLevel) {
+    return {
+      ...client,
+      loyaltyLevel: null,
+      loyaltyNextLevel: "BRONZE",
+      loyaltyAmountToNextLevelCents: Math.max(
+        LOYALTY_LEVEL_CONFIG[0].minSpentCents - client.totalSpentCents,
+        0,
+      ),
+    };
+  }
   const loyaltyNextLevel = getNextLoyaltyLevel(loyaltyLevel);
   const nextLevelConfig = LOYALTY_LEVEL_CONFIG.find((entry) => entry.level === loyaltyNextLevel);
 
@@ -83,11 +94,11 @@ export function attachLoyaltyToClient<T extends Client>(client: T): T {
   };
 }
 
-export function mapClientToLoyaltyClient(client: Client): LoyaltyClient {
+export function mapClientToLoyaltyClient(client: Client): LoyaltyClient | null {
   const enrichedClient = attachLoyaltyToClient(client);
 
   if (!enrichedClient.loyaltyLevel) {
-    throw new Error("Loyalty level is only available for client profiles");
+    return null;
   }
 
   return {

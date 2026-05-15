@@ -3,7 +3,7 @@ import { AuthenticationError } from "@backend/shared/errors/app-error";
 const WINDOW_MS = 1000 * 60 * 15;
 const LOCK_MS = 1000 * 60 * 15;
 const MAX_FAILURES_PER_IP = 10;
-const MAX_FAILURES_PER_EMAIL = 5;
+const MAX_FAILURES_PER_ACCOUNT = 5;
 
 type AttemptState = {
   count: number;
@@ -67,31 +67,31 @@ function clearKey(key: string) {
   attempts.delete(key);
 }
 
-function buildKeys(email: string, ipAddress: string) {
+function buildKeys(accountKey: string, ipAddress: string) {
   return {
     ipKey: `ip:${ipAddress}`,
-    emailKey: `email:${email}`,
+    accountKey: `login:${accountKey}`,
   };
 }
 
-export function assertCanAttemptLogin(email: string, ipAddress: string) {
+export function assertCanAttemptLogin(accountKey: string, ipAddress: string) {
   const now = Date.now();
-  const { ipKey, emailKey } = buildKeys(email, ipAddress);
+  const { ipKey, accountKey: accKey } = buildKeys(accountKey, ipAddress);
 
   assertNotLocked(ipKey, now);
-  assertNotLocked(emailKey, now);
+  assertNotLocked(accKey, now);
 }
 
-export function recordFailedLoginAttempt(email: string, ipAddress: string) {
+export function recordFailedLoginAttempt(accountKey: string, ipAddress: string) {
   const now = Date.now();
-  const { ipKey, emailKey } = buildKeys(email, ipAddress);
+  const { ipKey, accountKey: accKey } = buildKeys(accountKey, ipAddress);
 
   recordFailureForKey(ipKey, MAX_FAILURES_PER_IP, now);
-  recordFailureForKey(emailKey, MAX_FAILURES_PER_EMAIL, now);
+  recordFailureForKey(accKey, MAX_FAILURES_PER_ACCOUNT, now);
 }
 
-export function clearFailedLoginAttempts(email: string, ipAddress: string) {
-  const { ipKey, emailKey } = buildKeys(email, ipAddress);
+export function clearFailedLoginAttempts(accountKey: string, ipAddress: string) {
+  const { ipKey, accountKey: accKey } = buildKeys(accountKey, ipAddress);
   clearKey(ipKey);
-  clearKey(emailKey);
+  clearKey(accKey);
 }

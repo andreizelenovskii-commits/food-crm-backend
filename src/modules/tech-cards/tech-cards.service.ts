@@ -1,3 +1,4 @@
+import { ValidationError } from "@backend/shared/errors/app-error";
 import {
   createTechCard,
   getTechCardById,
@@ -6,6 +7,7 @@ import {
   getTechCards,
   updateTechCard,
 } from "@backend/modules/tech-cards/tech-cards.repository";
+import { deleteTechCard } from "@backend/modules/tech-cards/tech-cards.repository.delete";
 import type { TechCardInput } from "@backend/modules/tech-cards/tech-cards.validation";
 
 export async function fetchTechCards() {
@@ -30,4 +32,14 @@ export async function addTechCard(input: TechCardInput) {
 
 export async function updateTechCardById(id: number, input: TechCardInput) {
   return updateTechCard(id, input);
+}
+
+export async function deleteTechCardById(id: number) {
+  const deleted = await deleteTechCard(id);
+
+  if (!deleted) {
+    throw new ValidationError("Техкарта не найдена");
+  }
+
+  return true;
 }

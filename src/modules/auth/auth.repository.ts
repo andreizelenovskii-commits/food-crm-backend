@@ -8,22 +8,24 @@ import {
 
 type UserRow = {
   id: number;
-  email: string;
+  phone: string;
   password: string;
   role: string;
 };
 
 type CreateUserInput = {
-  email: string;
+  phone: string;
   passwordHash: string;
   role: UserRole;
 };
 
 export interface AuthUserRepository {
-  findByEmail(email: string): Promise<AuthUser | null>;
+  findByPhone(phone: string): Promise<AuthUser | null>;
+  /** Логин: мобильный 7XXXXXXXXXX или legacy email, хранящийся в User.phone. */
+  findByLoginKey(login: string): Promise<AuthUser | null>;
   create(input: CreateUserInput): Promise<AuthUser>;
   updatePasswordHash(userId: number, passwordHash: string): Promise<void>;
-  updateUser(userId: number, input: { email: string; role: UserRole; passwordHash?: string }): Promise<void>;
+  updateUser(userId: number, input: { phone: string; role: UserRole; passwordHash?: string }): Promise<void>;
 }
 
 function mapRowToAuthUser(row: UserRow): AuthUser {
@@ -31,22 +33,22 @@ function mapRowToAuthUser(row: UserRow): AuthUser {
 
   return {
     id: row.id,
-    email: row.email,
+    phone: row.phone,
     passwordHash: row.password,
     role: normalizedRole,
   };
 }
 
 class PgAuthUserRepository implements AuthUserRepository {
-  async findByEmail(email: string) {
+  async findByPhone(phone: string) {
     const result = await pool.query<UserRow>(
       `
-        SELECT "id", "email", "password", "role"
+        SELECT "id", "phone", "password", "role"
         FROM "User"
-        WHERE LOWER("email") = LOWER($1)
+        WHERE LOWER("phone") = LOWER($1)
         LIMIT 1
       `,
-      [email],
+      [phone],
     );
 
     const row = result.rows[0];
@@ -54,16 +56,39 @@ class PgAuthUserRepository implements AuthUserRepository {
     return row ? mapRowToAuthUser(row) : null;
   }
 
-  async create({ email, passwordHash, role }: CreateUserInput) {
+  async findByLoginKey(login: string) {
+    const trimmed = login.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^7\d{10}$/.test(trimmed)) {
+      const result = await pool.query<UserRow>(
+        `
+          SELECT "id", "phone", "password", "role"
+          FROM "User"
+          WHERE "phone" = $1
+          LIMIT 1
+        `,
+        [trimmed],
+      );
+      const row = result.rows[0];
+      return row ? mapRowToAuthUser(row) : null;
+    }
+
+    return this.findByPhone(trimmed);
+  }
+
+  async create({ phone, passwordHash, role }: CreateUserInput) {
     await ensureRecentDatabaseBackup("auth-user-create");
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim().toLowerCase();
     const result = await pool.query<UserRow>(
       `
-        INSERT INTO "User" ("email", "password", "role")
+        INSERT INTO "User" ("phone", "password", "role")
         VALUES ($1, $2, $3)
-        RETURNING "id", "email", "password", "role"
+        RETURNING "id", "phone", "password", "role"
       `,
-      [normalizedEmail, passwordHash, role],
+      [normalizedPhone, passwordHash, role],
     );
 
     return mapRowToAuthUser(result.rows[0]);
@@ -83,19 +108,19 @@ class PgAuthUserRepository implements AuthUserRepository {
 
   async updateUser(
     userId: number,
-    input: { email: string; role: UserRole; passwordHash?: string },
+    input: { phone: string; role: UserRole; passwordHash?: string },
   ) {
     await ensureRecentDatabaseBackup("auth-user-update");
-    const normalizedEmail = input.email.trim().toLowerCase();
+    const normalizedPhone = input.phone.trim().toLowerCase();
 
     if (input.passwordHash) {
       await pool.query(
         `
           UPDATE "User"
-          SET "email" = $2, "role" = $3, "password" = $4
+          SET "phone" = $2, "role" = $3, "password" = $4
           WHERE "id" = $1
         `,
-        [userId, normalizedEmail, input.role, input.passwordHash],
+        [userId, normalizedPhone, input.role, input.passwordHash],
       );
 
       return;
@@ -104,10 +129,10 @@ class PgAuthUserRepository implements AuthUserRepository {
     await pool.query(
       `
         UPDATE "User"
-        SET "email" = $2, "role" = $3
+        SET "phone" = $2, "role" = $3
         WHERE "id" = $1
       `,
-      [userId, normalizedEmail, input.role],
+      [userId, normalizedPhone, input.role],
     );
   }
 }
