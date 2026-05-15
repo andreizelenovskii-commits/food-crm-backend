@@ -40,7 +40,10 @@ export async function createApp() {
 
   app.get("/api/v1/health", async () => ({
     data: {
+      service: "food-crm-backend",
       status: "ok",
+      environment: process.env.NODE_ENV ?? "development",
+      timestamp: new Date().toISOString(),
     },
   }));
 

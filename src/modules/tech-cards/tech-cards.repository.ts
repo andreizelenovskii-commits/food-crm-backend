@@ -15,7 +15,6 @@ import {
 import { insertTechCardIngredients } from "@backend/modules/tech-cards/tech-cards.repository.ingredients";
 import { syncIngredientTechCardProduct } from "@backend/modules/tech-cards/tech-cards.repository.product-sync";
 import type { TechCardInput } from "@backend/modules/tech-cards/tech-cards.validation";
-
 type TechCardRow = {
   id: number;
   name: string;
