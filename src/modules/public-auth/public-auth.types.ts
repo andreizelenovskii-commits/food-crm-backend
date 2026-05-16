@@ -7,7 +7,6 @@ export type PublicClientSession = {
 };
 
 export type PublicClientProfile = {
-  id: number;
   name: string;
   phone: string;
   birthDate: string | null;

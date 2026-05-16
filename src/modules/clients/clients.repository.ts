@@ -150,6 +150,7 @@ export async function getClientByPhone(phone: string): Promise<Client | null> {
         c."birthDate",
         c."address",
         c."notes",
+        c."loyaltyLevelOverride",
         c."createdAt",
         COUNT(o."id") AS "ordersCount",
         COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
@@ -165,6 +166,7 @@ export async function getClientByPhone(phone: string): Promise<Client | null> {
         c."birthDate",
         c."address",
         c."notes",
+        c."loyaltyLevelOverride",
         c."createdAt"
       LIMIT 1
     `,

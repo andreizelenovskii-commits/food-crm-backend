@@ -119,7 +119,6 @@ export async function registerPublicClient(input: RegisterInput) {
 
 export function toPublicClientProfile(client: Client): PublicClientProfile {
   return {
-    id: client.id,
     name: client.name,
     phone: client.phone,
     birthDate: client.birthDate,
