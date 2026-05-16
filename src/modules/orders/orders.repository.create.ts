@@ -8,6 +8,7 @@ import type {
   OrderCreateInput,
   OrderListItem,
 } from "@backend/modules/orders/orders.types";
+import { calculateOrderPricing } from "@backend/modules/orders/orders.pricing";
 import {
   DELIVERY_ITEM_NAME,
   mapRowToOrder,
@@ -93,8 +94,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       };
     });
 
-    const subtotalCents = orderItems.reduce((sum, item) => sum + item.totalPriceCents, 0);
-    const deliveryFeeCents = input.isInternal ? 0 : input.deliveryFeeCents;
+    const itemsTotalCents = orderItems.reduce((sum, item) => sum + item.totalPriceCents, 0);
     const currentClient = clientExists.rows[0];
     const discountPercent =
       !input.isInternal && currentClient.type === "CLIENT"
@@ -103,8 +103,12 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
               resolveLoyaltyLevel(Number(currentClient.totalSpentCents ?? 0)),
           )
         : 0;
-    const discountCents = Math.round((subtotalCents * discountPercent) / 100);
-    const totalCents = Math.max(subtotalCents - discountCents, 0) + deliveryFeeCents;
+    const pricing = calculateOrderPricing({
+      itemsTotalCents,
+      deliveryFeeCents: input.deliveryFeeCents,
+      discountPercent,
+      isInternal: input.isInternal,
+    });
 
     const result = await client.query<OrderRow>(
       `
@@ -153,9 +157,9 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
         input.deliveryAddressSnapshot ?? null,
         input.customerComment ?? null,
         input.employeeId,
-        subtotalCents,
+        pricing.subtotalCents,
         discountPercent,
-        totalCents,
+        pricing.totalCents,
       ],
     );
 
@@ -185,7 +189,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       );
     }
 
-    if (deliveryFeeCents > 0) {
+    if (pricing.deliveryFeeCents > 0) {
       await client.query(
         `
           INSERT INTO "OrderItem" (
@@ -198,7 +202,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           )
           VALUES ($1, NULL, $2, 1, $3, $3)
         `,
-        [order.id, DELIVERY_ITEM_NAME, deliveryFeeCents],
+        [order.id, DELIVERY_ITEM_NAME, pricing.deliveryFeeCents],
       );
     }
 

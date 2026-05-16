@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json --noEmit",
     "db:deploy": "prisma migrate deploy",
     "start": "tsx --tsconfig tsconfig.json src/server.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
