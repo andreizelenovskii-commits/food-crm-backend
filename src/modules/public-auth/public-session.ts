@@ -45,7 +45,7 @@ export function decodePublicClientSession(value: string | undefined): PublicClie
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
     ) as PublicClientSession;
 
-    if (!payload.clientId || !payload.phone || payload.expiresAt <= Date.now()) {
+    if (!payload.phone || payload.expiresAt <= Date.now()) {
       return null;
     }
 

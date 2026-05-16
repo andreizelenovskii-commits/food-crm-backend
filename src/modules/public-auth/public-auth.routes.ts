@@ -39,7 +39,6 @@ function setClientCookie(
   client: { id: number; phone: string },
 ) {
   const session = createPublicClientSession({
-    clientId: client.id,
     phone: client.phone,
   });
 

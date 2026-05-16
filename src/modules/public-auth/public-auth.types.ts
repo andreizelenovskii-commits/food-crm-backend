@@ -1,7 +1,6 @@
 export type PublicAuthPurpose = "register" | "login";
 
 export type PublicClientSession = {
-  clientId: number;
   phone: string;
   expiresAt: number;
 };
