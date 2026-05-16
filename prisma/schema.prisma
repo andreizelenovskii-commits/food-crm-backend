@@ -69,6 +69,7 @@ model Product {
   inventoryItems InventorySessionItem[]
   incomingItems IncomingActItem[]
   writeoffItems WriteoffActItem[]
+  orderInventoryMovements OrderInventoryMovement[]
 }
 
 model Employee {
@@ -126,6 +127,29 @@ model Order {
   totalCents  Int
   createdAt   DateTime    @default(now())
   items       OrderItem[]
+  inventoryMovements OrderInventoryMovement[]
+}
+
+model OrderInventoryMovement {
+  id                  Int      @id @default(autoincrement())
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId             Int
+  product             Product  @relation(fields: [productId], references: [id])
+  productId           Int
+  productName         String
+  productUnit         String
+  quantity            Float
+  movementType        String
+  orderStatus         OrderStatus
+  reason              String
+  actorUserId         Int?
+  stockQuantityBefore Float
+  stockQuantityAfter  Float
+  createdAt           DateTime @default(now())
+
+  @@unique([orderId, productId, movementType])
+  @@index([orderId, createdAt])
+  @@index([productId, createdAt])
 }
 
 model OrderItem {

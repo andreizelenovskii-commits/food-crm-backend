@@ -1,8 +1,10 @@
 import { pool } from "@backend/shared/db/pool";
+import { withTransaction } from "@backend/shared/db/transaction";
 import type {
   OrderListItem,
   OrderStatus,
 } from "@backend/modules/orders/orders.types";
+import { consumeOrderStockForStatus } from "@backend/modules/orders/orders.inventory";
 import {
   mapRowToOrder,
   type OrderRow,
@@ -115,42 +117,57 @@ export async function getOrdersByClientId(clientId: number): Promise<OrderListIt
 export async function updateOrderStatus(
   orderId: number,
   status: OrderStatus,
+  actorUserId?: number,
 ): Promise<OrderListItem | null> {
-  const result = await pool.query<OrderRow>(
-    `
-      UPDATE "Order" o
-      SET "status" = $2
-      WHERE o."id" = $1
-      RETURNING
-        o."id",
-        o."status",
-        o."source",
-        o."isInternal",
-        o."customerPhoneSnapshot",
-        o."deliveryAddressSnapshot",
-        o."customerComment",
-        o."subtotalCents",
-        o."discountPercent",
-        o."totalCents",
-        o."createdAt",
-        (SELECT c."id" FROM "Client" c WHERE c."id" = o."clientId") AS "clientId",
-        COALESCE(
-          (SELECT c."name" FROM "Client" c WHERE c."id" = o."clientId"),
-          o."clientNameSnapshot"
-        ) AS "clientName",
-        COALESCE(
-          (SELECT c."type" FROM "Client" c WHERE c."id" = o."clientId"),
-          o."clientTypeSnapshot"
-        ) AS "clientType",
-        (SELECT e."id" FROM "Employee" e WHERE e."id" = o."employeeId") AS "employeeId",
-        (SELECT e."name" FROM "Employee" e WHERE e."id" = o."employeeId") AS "employeeName"
-    `,
-    [orderId, status],
-  );
+  return withTransaction(async (client) => {
+    const currentOrder = await client.query<{ id: number }>(
+      `
+        SELECT "id"
+        FROM "Order"
+        WHERE "id" = $1
+        FOR UPDATE
+      `,
+      [orderId],
+    );
 
-  if (!result.rowCount) {
-    return null;
-  }
+    if (!currentOrder.rowCount) {
+      return null;
+    }
 
-  return mapRowToOrder(result.rows[0]);
+    await consumeOrderStockForStatus(client, orderId, status, actorUserId);
+
+    const result = await client.query<OrderRow>(
+      `
+        UPDATE "Order" o
+        SET "status" = $2
+        WHERE o."id" = $1
+        RETURNING
+          o."id",
+          o."status",
+          o."source",
+          o."isInternal",
+          o."customerPhoneSnapshot",
+          o."deliveryAddressSnapshot",
+          o."customerComment",
+          o."subtotalCents",
+          o."discountPercent",
+          o."totalCents",
+          o."createdAt",
+          (SELECT c."id" FROM "Client" c WHERE c."id" = o."clientId") AS "clientId",
+          COALESCE(
+            (SELECT c."name" FROM "Client" c WHERE c."id" = o."clientId"),
+            o."clientNameSnapshot"
+          ) AS "clientName",
+          COALESCE(
+            (SELECT c."type" FROM "Client" c WHERE c."id" = o."clientId"),
+            o."clientTypeSnapshot"
+          ) AS "clientType",
+          (SELECT e."id" FROM "Employee" e WHERE e."id" = o."employeeId") AS "employeeId",
+          (SELECT e."name" FROM "Employee" e WHERE e."id" = o."employeeId") AS "employeeName"
+      `,
+      [orderId, status],
+    );
+
+    return result.rowCount ? mapRowToOrder(result.rows[0]) : null;
+  });
 }

@@ -131,7 +131,7 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
     }
 
     return {
-      data: await updateOrderStatusById(orderId, nextStatus as OrderStatus),
+      data: await updateOrderStatusById(orderId, nextStatus as OrderStatus, user.id),
     };
   });
 }
