@@ -79,6 +79,7 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
     const formData = toFormData(getRequestBody(request), [
       "clientId",
       "employeeId",
+      "source",
       "isInternal",
       "deliveryFeeCents",
       "items",

@@ -2,9 +2,12 @@ import { ValidationError } from "@backend/shared/errors/app-error";
 import {
   type OrderDraftItem,
   ORDER_STATUSES,
+  type OrderSource,
   type OrderCreateInput,
   type OrderStatus,
 } from "@backend/modules/orders/orders.types";
+
+const ORDER_SOURCES = ["ADMIN", "PHONE"] as const;
 
 function normalizeInput(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -14,6 +17,7 @@ export type OrderFormValues = {
   clientId: string;
   employeeId: string;
   status: string;
+  source: string;
   deliveryFeeCents: string;
   isInternal: boolean;
   items: string;
@@ -26,6 +30,7 @@ export function getOrderFormValues(formData: FormData): OrderFormValues {
     clientId: read("clientId"),
     employeeId: read("employeeId"),
     status: read("status"),
+    source: read("source"),
     deliveryFeeCents: read("deliveryFeeCents"),
     isInternal: read("isInternal") === "true",
     items: read("items"),
@@ -36,6 +41,7 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
   const clientId = Number(normalizeInput(formData.get("clientId")));
   const employeeId = Number(normalizeInput(formData.get("employeeId")));
   const status = normalizeInput(formData.get("status"));
+  const source = normalizeInput(formData.get("source")) || "ADMIN";
   const deliveryFeeCents = Number(normalizeInput(formData.get("deliveryFeeCents")));
   const isInternal = normalizeInput(formData.get("isInternal")) === "true";
   const itemsRaw = normalizeInput(formData.get("items"));
@@ -50,6 +56,10 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
 
   if (!ORDER_STATUSES.includes(status as OrderStatus)) {
     throw new ValidationError("Выбери корректный статус заказа");
+  }
+
+  if (!ORDER_SOURCES.includes(source as (typeof ORDER_SOURCES)[number])) {
+    throw new ValidationError("Выбери корректный источник заказа");
   }
 
   if (!Number.isInteger(deliveryFeeCents) || deliveryFeeCents < 0) {
@@ -83,6 +93,7 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
     employeeId,
     isInternal,
     status: status as OrderStatus,
+    source: source as OrderSource,
     deliveryFeeCents,
     items,
   };
