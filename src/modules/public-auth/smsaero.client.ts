@@ -10,9 +10,13 @@ type SmsAeroResponse = {
 export async function sendSmsCode(phone: string, code: string) {
   const text = `FoodLike: код подтверждения ${code}. Никому его не сообщайте.`;
 
-  if (!backendEnv.smsAeroEnabled || !backendEnv.smsAeroEmail || !backendEnv.smsAeroApiKey) {
+  if (!backendEnv.smsAeroEnabled) {
     console.info(`[sms-dev] ${phone}: ${text}`);
     return;
+  }
+
+  if (!backendEnv.smsAeroEmail || !backendEnv.smsAeroApiKey) {
+    throw new ValidationError("SMS Aero не настроен: укажите SMSAERO_EMAIL и SMSAERO_API_KEY.");
   }
 
   const body = new URLSearchParams({

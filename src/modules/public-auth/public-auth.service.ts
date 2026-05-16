@@ -6,6 +6,7 @@ import type { Client } from "@backend/modules/clients/clients.types";
 import { attachLoyaltyToClient } from "@backend/modules/loyalty/loyalty.rules";
 import {
   assertCanSendCode,
+  deleteLatestCode,
   storeCode,
   verifyStoredCode,
 } from "@backend/modules/public-auth/public-auth.repository";
@@ -77,7 +78,13 @@ export async function requestPublicCode(phone: string, purpose: PublicAuthPurpos
   await assertCanSendCode(phone, purpose);
   const code = generateCode();
   await storeCode(phone, purpose, code);
-  await sendSmsCode(phone, code);
+
+  try {
+    await sendSmsCode(phone, code);
+  } catch (error) {
+    await deleteLatestCode(phone, purpose);
+    throw error;
+  }
 }
 
 export async function verifyPublicCode(phone: string, purpose: PublicAuthPurpose, code: string) {

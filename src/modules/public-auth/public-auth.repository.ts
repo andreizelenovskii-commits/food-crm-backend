@@ -46,6 +46,22 @@ export async function storeCode(phone: string, purpose: PublicAuthPurpose, code:
   );
 }
 
+export async function deleteLatestCode(phone: string, purpose: PublicAuthPurpose) {
+  await pool.query(
+    `
+      DELETE FROM "PhoneVerificationCode"
+      WHERE "id" = (
+        SELECT "id"
+        FROM "PhoneVerificationCode"
+        WHERE "phone" = $1 AND "purpose" = $2 AND "consumedAt" IS NULL
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+      )
+    `,
+    [phone, purpose],
+  );
+}
+
 export async function verifyStoredCode(phone: string, purpose: PublicAuthPurpose, code: string) {
   const result = await pool.query<CodeRow>(
     `
