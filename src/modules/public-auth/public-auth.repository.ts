@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { backendEnv } from "@backend/config/env";
 import { pool } from "@backend/shared/db/pool";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import type { PublicAuthPurpose } from "@backend/modules/public-auth/public-auth.types";
@@ -15,7 +16,9 @@ type CodeRow = {
 };
 
 function hashCode(phone: string, code: string) {
-  return createHash("sha256").update(`${phone}:${code}`).digest("hex");
+  return createHash("sha256")
+    .update(`${backendEnv.sessionSecret}:${phone}:${code}`)
+    .digest("hex");
 }
 
 export async function assertCanSendCode(phone: string, purpose: PublicAuthPurpose) {
@@ -37,6 +40,15 @@ export async function assertCanSendCode(phone: string, purpose: PublicAuthPurpos
 }
 
 export async function storeCode(phone: string, purpose: PublicAuthPurpose, code: string) {
+  await pool.query(
+    `
+      UPDATE "PhoneVerificationCode"
+      SET "consumedAt" = NOW()
+      WHERE "phone" = $1 AND "purpose" = $2 AND "consumedAt" IS NULL
+    `,
+    [phone, purpose],
+  );
+
   await pool.query(
     `
       INSERT INTO "PhoneVerificationCode" ("phone", "purpose", "codeHash", "expiresAt")
