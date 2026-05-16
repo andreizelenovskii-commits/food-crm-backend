@@ -3,12 +3,17 @@ import {
   deleteCatalogItem,
   getCatalogItemById,
   getCatalogItems,
+  getPublicCatalogItems,
   updateCatalogItem,
 } from "@backend/modules/catalog/catalog.repository";
 import type { CatalogItemInput } from "@backend/modules/catalog/catalog.validation";
 
 export async function fetchCatalogItems() {
   return getCatalogItems();
+}
+
+export async function fetchPublicCatalogItems() {
+  return getPublicCatalogItems();
 }
 
 export async function fetchCatalogItemById(id: number) {

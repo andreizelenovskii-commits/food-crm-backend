@@ -110,11 +110,15 @@ model EmployeeAdjustment {
 model Order {
   id          Int         @id @default(autoincrement())
   status      OrderStatus @default(SENT_TO_KITCHEN)
+  source      String      @default("ADMIN")
   isInternal  Boolean     @default(false)
   client      Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientId    Int?
   clientNameSnapshot String
   clientTypeSnapshot ClientType
+  customerPhoneSnapshot String?
+  deliveryAddressSnapshot String?
+  customerComment String?
   employee    Employee    @relation(fields: [employeeId], references: [id])
   employeeId  Int
   subtotalCents Int

@@ -7,6 +7,13 @@ import {
   fetchOrdersByClientId,
   updateOrderStatusById,
 } from "@backend/modules/orders/orders.service";
+import {
+  createPublicOrder,
+  fetchPublicOrderStatus,
+  parsePublicOrderInput,
+} from "@backend/modules/orders/public-orders.service";
+import { decodePublicClientSession } from "@backend/modules/public-auth/public-session";
+import { backendEnv } from "@backend/config/env";
 import { ORDER_STATUSES, type OrderStatus } from "@backend/modules/orders/orders.types";
 import { parseCreateOrderInput } from "@backend/modules/orders/orders.validation";
 import {
@@ -23,6 +30,33 @@ import { authenticateRequest, requirePermission } from "@backend/modules/auth/au
 import { getNumericParam, getRequestBody, getStringBodyField, toFormData } from "@backend/lib/request";
 
 export async function registerOrdersRoutes(app: FastifyInstance) {
+  app.post("/api/v1/public/orders", async (request) => {
+    const session = decodePublicClientSession(request.cookies[backendEnv.clientSessionCookieName]);
+
+    if (!session) {
+      throw new ValidationError("Войдите или зарегистрируйтесь перед оформлением заказа");
+    }
+
+    return {
+      data: await createPublicOrder(
+        session.phone,
+        parsePublicOrderInput(getRequestBody(request)),
+      ),
+    };
+  });
+
+  app.get("/api/v1/public/orders/:orderId", async (request) => {
+    const session = decodePublicClientSession(request.cookies[backendEnv.clientSessionCookieName]);
+
+    if (!session) {
+      throw new ValidationError("Войдите, чтобы посмотреть статус заказа");
+    }
+
+    return {
+      data: await fetchPublicOrderStatus(getNumericParam(request, "orderId"), session.phone),
+    };
+  });
+
   app.get("/api/v1/orders", { preHandler: requirePermission("view_orders") }, async () => ({
     data: await fetchOrders(),
   }));

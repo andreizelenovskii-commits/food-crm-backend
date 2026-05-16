@@ -5,6 +5,7 @@ import {
   deleteCatalogItemById,
   fetchCatalogItemById,
   fetchCatalogItems,
+  fetchPublicCatalogItems,
   updateCatalogItemById,
 } from "@backend/modules/catalog/catalog.service";
 import { parseCatalogItemInput } from "@backend/modules/catalog/catalog.validation";
@@ -32,6 +33,10 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
 
   app.get("/api/v1/catalog", { preHandler: requirePermission("view_catalog") }, async () => ({
     data: await fetchCatalogItems(),
+  }));
+
+  app.get("/api/v1/public/catalog", async () => ({
+    data: await fetchPublicCatalogItems(),
   }));
 
   app.get("/uploads/catalog/:filename", async (request, reply) => {

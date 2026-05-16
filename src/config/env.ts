@@ -18,6 +18,7 @@ type BackendEnv = {
   smsAeroApiKey: string | null;
   smsAeroSign: string;
   smsAeroEnabled: boolean;
+  publicOrderEmployeeId: number | null;
 };
 
 function getRequiredEnv(name: string) {
@@ -79,6 +80,19 @@ function parseBoolean(value: string | null, fallback: boolean) {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
+function parseOptionalPositiveInteger(value: string | null, name: string) {
+  if (value === null) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return parsed;
+}
+
 export const backendEnv: BackendEnv = {
   host: getOptionalEnv("HOST") ?? "0.0.0.0",
   port: parsePort(getOptionalEnv("PORT")),
@@ -93,4 +107,8 @@ export const backendEnv: BackendEnv = {
   smsAeroApiKey: getOptionalEnv("SMSAERO_API_KEY"),
   smsAeroSign: getOptionalEnv("SMSAERO_SIGN") ?? "SMS Aero",
   smsAeroEnabled: parseBoolean(getOptionalEnv("SMSAERO_ENABLED"), true),
+  publicOrderEmployeeId: parseOptionalPositiveInteger(
+    getOptionalEnv("PUBLIC_ORDER_EMPLOYEE_ID"),
+    "PUBLIC_ORDER_EMPLOYEE_ID",
+  ),
 };

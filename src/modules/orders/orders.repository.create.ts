@@ -110,20 +110,28 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       `
         INSERT INTO "Order" (
           "status",
+          "source",
           "isInternal",
           "clientId",
           "clientNameSnapshot",
           "clientTypeSnapshot",
+          "customerPhoneSnapshot",
+          "deliveryAddressSnapshot",
+          "customerComment",
           "employeeId",
           "subtotalCents",
           "discountPercent",
           "totalCents"
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING
           "id",
           "status",
+          "source",
           "isInternal",
+          "customerPhoneSnapshot",
+          "deliveryAddressSnapshot",
+          "customerComment",
           "subtotalCents",
           "discountPercent",
           "totalCents",
@@ -131,15 +139,19 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           "clientId",
           "clientNameSnapshot" AS "clientName",
           "clientTypeSnapshot" AS "clientType",
-          (SELECT e."id" FROM "Employee" e WHERE e."id" = $6) AS "employeeId",
-          (SELECT e."name" FROM "Employee" e WHERE e."id" = $6) AS "employeeName"
+          (SELECT e."id" FROM "Employee" e WHERE e."id" = $10) AS "employeeId",
+          (SELECT e."name" FROM "Employee" e WHERE e."id" = $10) AS "employeeName"
       `,
       [
         input.status,
+        input.source ?? "ADMIN",
         input.isInternal,
         input.clientId,
         currentClient.name,
         currentClient.type,
+        input.customerPhoneSnapshot ?? null,
+        input.deliveryAddressSnapshot ?? null,
+        input.customerComment ?? null,
         input.employeeId,
         subtotalCents,
         discountPercent,

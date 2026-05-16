@@ -35,6 +35,32 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
   return result.rows.map(mapRowToCatalogItem);
 }
 
+export async function getPublicCatalogItems(): Promise<CatalogItem[]> {
+  const result = await pool.query<CatalogRow>(
+    `
+      SELECT
+        c."id",
+        c."name",
+        c."slug",
+        c."category",
+        t."pizzaSize",
+        c."description",
+        c."imageUrl",
+        c."priceCents",
+        c."isPublished",
+        c."createdAt",
+        c."technologicalCardId",
+        t."name" AS "technologicalCardName"
+      FROM "CatalogItem" c
+      INNER JOIN "TechnologicalCard" t ON t."id" = c."technologicalCardId"
+      WHERE c."isPublished" = TRUE
+      ORDER BY c."category" ASC NULLS LAST, c."createdAt" DESC
+    `,
+  );
+
+  return result.rows.map(mapRowToCatalogItem);
+}
+
 export async function getCatalogItemById(id: number): Promise<CatalogItem | null> {
   const result = await pool.query<CatalogRow>(
     `
