@@ -5,14 +5,24 @@ Isolated API-first backend for `food-crm`.
 ## Run
 
 ```bash
-cd backend
-npm install
+npm ci
+cp .env.example .env
+npx prisma generate
+npm run db:deploy
+npm run typecheck
+npm test
 npm run dev
 ```
 
-The backend uses its own `.env` file inside `backend/`.
-For local development it also loads the root `.env` as a fallback, so `DATABASE_URL`
-and `SESSION_SECRET` can stay in one place.
+Check:
+
+```bash
+curl http://127.0.0.1:4000/api/v1/health
+```
+
+The backend uses its own `.env` file in the repository root. For local
+development it also loads `../.env` as a fallback, so `DATABASE_URL` and
+`SESSION_SECRET` can stay one level above the backend repo when needed.
 
 Required variables:
 
@@ -21,6 +31,9 @@ DATABASE_URL="postgres://..."
 SESSION_SECRET="at-least-32-random-chars"
 BACKEND_CORS_ORIGIN="http://localhost:3000,http://127.0.0.1:3000"
 ```
+
+Before running `npm run db:deploy`, make sure `DATABASE_URL` points to an
+available PostgreSQL database.
 
 ## Notes
 
