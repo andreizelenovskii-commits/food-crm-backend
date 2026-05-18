@@ -19,6 +19,8 @@ jobs:
       DEPLOY_HOST: 163.5.29.68
       DEPLOY_USER: deploy
       DEPLOY_PORT: 22
+      DATABASE_URL: postgresql://food_crm_user:change-me@localhost:5432/food_crm
+      SESSION_SECRET: build-time-placeholder-session-secret
 
     steps:
       - name: Checkout

@@ -12,6 +12,9 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://food_crm_user:change-me@localhost:5432/food_crm
+      SESSION_SECRET: build-time-placeholder-session-secret
 
     steps:
       - name: Checkout
@@ -28,8 +31,6 @@ jobs:
 
       - name: Generate Prisma client
         run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://food_crm_user:change-me@localhost:5432/food_crm
 
       - name: Typecheck
         run: npm run typecheck
