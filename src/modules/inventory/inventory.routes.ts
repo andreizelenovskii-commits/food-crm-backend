@@ -34,6 +34,7 @@ import {
 } from "@backend/modules/inventory/inventory.validation";
 import { requirePermission } from "@backend/modules/auth/auth-context";
 import { appendItems, getNumericParam, getRequestBody, toFormData } from "@backend/lib/request";
+import { writeAuditLog } from "@backend/modules/audit/audit-log";
 
 const PRODUCT_FIELDS = ["name", "category", "unit", "stockQuantity", "price", "description"];
 
@@ -94,7 +95,15 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/inventory/products", { preHandler: requirePermission("manage_inventory") }, async (request) => {
     const input = parseProductInput(toFormData(getRequestBody(request), PRODUCT_FIELDS));
-    return { data: await addProduct(input) };
+    const product = await addProduct(input);
+    await writeAuditLog({
+      request,
+      action: "product.create",
+      entityType: "product",
+      entityId: product.id,
+      after: product,
+    });
+    return { data: product };
   });
 
   app.get(
@@ -109,17 +118,39 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
     "/api/v1/inventory/products/:productId",
     { preHandler: requirePermission("manage_inventory") },
     async (request) => {
+      const productId = getNumericParam(request, "productId");
+      const before = await fetchProductById(productId);
       const input = parseProductInput(toFormData(getRequestBody(request), PRODUCT_FIELDS));
-      return { data: await updateProductService(getNumericParam(request, "productId"), input) };
+      const product = await updateProductService(productId, input);
+      await writeAuditLog({
+        request,
+        action: "product.update",
+        entityType: "product",
+        entityId: productId,
+        before,
+        after: product,
+      });
+      return { data: product };
     },
   );
 
   app.delete(
     "/api/v1/inventory/products/:productId",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: { deleted: await deleteProductService(getNumericParam(request, "productId")) },
-    }),
+    async (request) => {
+      const productId = getNumericParam(request, "productId");
+      const before = await fetchProductById(productId);
+      const deleted = await deleteProductService(productId);
+      await writeAuditLog({
+        request,
+        action: "product.delete",
+        entityType: "product",
+        entityId: productId,
+        before,
+        after: { deleted },
+      });
+      return { data: { deleted } };
+    },
   );
 
   app.get("/api/v1/inventory/responsible-options", { preHandler: requirePermission("view_inventory") }, async () => ({
@@ -128,7 +159,14 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/inventory/audit", { preHandler: requirePermission("manage_inventory") }, async (request) => {
     const input = parseInventoryAuditInput(auditFormData(getRequestBody(request)));
-    return { data: await applyInventoryAuditService(input) };
+    const result = await applyInventoryAuditService(input);
+    await writeAuditLog({
+      request,
+      action: "inventory.audit.apply",
+      entityType: "inventory",
+      after: { input, result },
+    });
+    return { data: result };
   });
 
   app.get("/api/v1/inventory/sessions", { preHandler: requirePermission("view_inventory") }, async () => ({
@@ -137,7 +175,15 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/inventory/sessions", { preHandler: requirePermission("manage_inventory") }, async (request) => {
     const input = parseCreateInventorySessionInput(sessionFormData(getRequestBody(request)));
-    return { data: await createInventorySessionService(input) };
+    const session = await createInventorySessionService(input);
+    await writeAuditLog({
+      request,
+      action: "inventory_session.create",
+      entityType: "inventory_session",
+      entityId: session.id,
+      after: session,
+    });
+    return { data: session };
   });
 
   app.get(
@@ -152,25 +198,58 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
     "/api/v1/inventory/sessions/:sessionId/actuals",
     { preHandler: requirePermission("manage_inventory") },
     async (request) => {
+      const sessionId = getNumericParam(request, "sessionId");
+      const before = await fetchInventorySessionById(sessionId);
       const input = parseInventorySessionActualsInput(sessionActualsFormData(getRequestBody(request)));
-      return { data: await saveInventorySessionActualsService(getNumericParam(request, "sessionId"), input) };
+      const session = await saveInventorySessionActualsService(sessionId, input);
+      await writeAuditLog({
+        request,
+        action: "inventory_session.actuals.update",
+        entityType: "inventory_session",
+        entityId: sessionId,
+        before,
+        after: session,
+      });
+      return { data: session };
     },
   );
 
   app.post(
     "/api/v1/inventory/sessions/:sessionId/close",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: await closeInventorySessionService(getNumericParam(request, "sessionId")),
-    }),
+    async (request) => {
+      const sessionId = getNumericParam(request, "sessionId");
+      const before = await fetchInventorySessionById(sessionId);
+      const session = await closeInventorySessionService(sessionId);
+      await writeAuditLog({
+        request,
+        action: "inventory_session.close",
+        entityType: "inventory_session",
+        entityId: sessionId,
+        before,
+        after: session,
+      });
+      return { data: session };
+    },
   );
 
   app.delete(
     "/api/v1/inventory/sessions/:sessionId",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: { deleted: await deleteInventorySessionService(getNumericParam(request, "sessionId")) },
-    }),
+    async (request) => {
+      const sessionId = getNumericParam(request, "sessionId");
+      const before = await fetchInventorySessionById(sessionId);
+      const deleted = await deleteInventorySessionService(sessionId);
+      await writeAuditLog({
+        request,
+        action: "inventory_session.delete",
+        entityType: "inventory_session",
+        entityId: sessionId,
+        before,
+        after: { deleted },
+      });
+      return { data: { deleted } };
+    },
   );
 
   app.get("/api/v1/inventory/incoming-acts", { preHandler: requirePermission("view_inventory") }, async () => ({
@@ -179,7 +258,15 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/inventory/incoming-acts", { preHandler: requirePermission("manage_inventory") }, async (request) => {
     const input = parseCreateIncomingActInput(incomingActFormData(getRequestBody(request)));
-    return { data: await createIncomingActService(input) };
+    const act = await createIncomingActService(input);
+    await writeAuditLog({
+      request,
+      action: "incoming_act.create",
+      entityType: "incoming_act",
+      entityId: act.id,
+      after: act,
+    });
+    return { data: act };
   });
 
   app.get(
@@ -194,25 +281,58 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
     "/api/v1/inventory/incoming-acts/:actId",
     { preHandler: requirePermission("manage_inventory") },
     async (request) => {
+      const actId = getNumericParam(request, "actId");
+      const before = await fetchIncomingActById(actId);
       const input = parseCreateIncomingActInput(incomingActFormData(getRequestBody(request)));
-      return { data: await updateIncomingActService(getNumericParam(request, "actId"), input) };
+      const act = await updateIncomingActService(actId, input);
+      await writeAuditLog({
+        request,
+        action: "incoming_act.update",
+        entityType: "incoming_act",
+        entityId: actId,
+        before,
+        after: act,
+      });
+      return { data: act };
     },
   );
 
   app.post(
     "/api/v1/inventory/incoming-acts/:actId/complete",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: await completeIncomingActService(getNumericParam(request, "actId")),
-    }),
+    async (request) => {
+      const actId = getNumericParam(request, "actId");
+      const before = await fetchIncomingActById(actId);
+      const act = await completeIncomingActService(actId);
+      await writeAuditLog({
+        request,
+        action: "incoming_act.complete",
+        entityType: "incoming_act",
+        entityId: actId,
+        before,
+        after: act,
+      });
+      return { data: act };
+    },
   );
 
   app.delete(
     "/api/v1/inventory/incoming-acts/:actId",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: { deleted: await deleteIncomingActService(getNumericParam(request, "actId")) },
-    }),
+    async (request) => {
+      const actId = getNumericParam(request, "actId");
+      const before = await fetchIncomingActById(actId);
+      const deleted = await deleteIncomingActService(actId);
+      await writeAuditLog({
+        request,
+        action: "incoming_act.delete",
+        entityType: "incoming_act",
+        entityId: actId,
+        before,
+        after: { deleted },
+      });
+      return { data: { deleted } };
+    },
   );
 
   app.get("/api/v1/inventory/writeoff-acts", { preHandler: requirePermission("view_inventory") }, async () => ({
@@ -221,22 +341,48 @@ export async function registerInventoryRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/inventory/writeoff-acts", { preHandler: requirePermission("manage_inventory") }, async (request) => {
     const input = parseCreateWriteoffActInput(writeoffActFormData(getRequestBody(request)));
-    return { data: await createWriteoffActService(input) };
+    const act = await createWriteoffActService(input);
+    await writeAuditLog({
+      request,
+      action: "writeoff_act.create",
+      entityType: "writeoff_act",
+      entityId: act.id,
+      after: act,
+    });
+    return { data: act };
   });
 
   app.post(
     "/api/v1/inventory/writeoff-acts/:actId/complete",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: await completeWriteoffActService(getNumericParam(request, "actId")),
-    }),
+    async (request) => {
+      const actId = getNumericParam(request, "actId");
+      const act = await completeWriteoffActService(actId);
+      await writeAuditLog({
+        request,
+        action: "writeoff_act.complete",
+        entityType: "writeoff_act",
+        entityId: actId,
+        after: act,
+      });
+      return { data: act };
+    },
   );
 
   app.delete(
     "/api/v1/inventory/writeoff-acts/:actId",
     { preHandler: requirePermission("manage_inventory") },
-    async (request) => ({
-      data: { deleted: await deleteWriteoffActService(getNumericParam(request, "actId")) },
-    }),
+    async (request) => {
+      const actId = getNumericParam(request, "actId");
+      const deleted = await deleteWriteoffActService(actId);
+      await writeAuditLog({
+        request,
+        action: "writeoff_act.delete",
+        entityType: "writeoff_act",
+        entityId: actId,
+        after: { deleted },
+      });
+      return { data: { deleted } };
+    },
   );
 }

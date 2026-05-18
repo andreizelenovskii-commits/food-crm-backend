@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shouldConsumeOrderStock } from "@backend/modules/orders/orders.inventory";
+import { ORDER_STATUSES } from "@backend/modules/orders/orders.types";
 
 test("inventory is consumed once the kitchen marks an order ready", () => {
-  assert.equal(shouldConsumeOrderStock("READY"), true);
-  assert.equal(shouldConsumeOrderStock("SENT_TO_KITCHEN"), false);
-  assert.equal(shouldConsumeOrderStock("PACKED"), false);
-  assert.equal(shouldConsumeOrderStock("DELIVERED_PAID"), false);
-  assert.equal(shouldConsumeOrderStock("CANCELLED"), false);
+  for (const status of ORDER_STATUSES) {
+    assert.equal(shouldConsumeOrderStock(status), status === "READY");
+  }
 });

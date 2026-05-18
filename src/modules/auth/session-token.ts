@@ -4,11 +4,13 @@ import { backendEnv } from "@backend/config/env";
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 export type ApiSessionPayload = {
+  sessionId: string;
   userId: number;
   phone: string;
   /** Старые токены после перехода на телефон */
   email?: string;
   role: string;
+  issuedAt: number;
   expiresAt: number;
 };
 
@@ -16,11 +18,20 @@ function sign(payload: string) {
   return createHmac("sha256", backendEnv.sessionSecret).update(payload).digest("hex");
 }
 
-export function createApiSessionToken(payload: Omit<ApiSessionPayload, "expiresAt">) {
-  const expiresAt = Date.now() + backendEnv.sessionTtlDays * DAY_MS;
+export function getApiSessionExpiresAt() {
+  return Date.now() + backendEnv.sessionTtlDays * DAY_MS;
+}
+
+export function createApiSessionToken(
+  payload: Omit<ApiSessionPayload, "expiresAt" | "issuedAt">,
+  options: { expiresAt?: number } = {},
+) {
+  const issuedAt = Date.now();
+  const expiresAt = options.expiresAt ?? getApiSessionExpiresAt();
   const encodedPayload = Buffer.from(
     JSON.stringify({
       ...payload,
+      issuedAt,
       expiresAt,
     } satisfies ApiSessionPayload),
   ).toString("base64url");
@@ -61,7 +72,7 @@ export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
 
     const phone = payload.phone ?? payload.email ?? "";
 
-    if (!phone) {
+    if (!phone || typeof payload.sessionId !== "string" || !payload.sessionId) {
       return null;
     }
 

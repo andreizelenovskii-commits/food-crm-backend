@@ -20,11 +20,55 @@ enum ClientType {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  phone     String   @unique
-  password  String
-  role      String   @default("admin")
-  createdAt DateTime @default(now())
+  id                Int      @id @default(autoincrement())
+  phone             String   @unique
+  password          String
+  role              String   @default("admin")
+  passwordUpdatedAt DateTime?
+  createdAt         DateTime @default(now())
+  sessions          Session[]
+}
+
+model Session {
+  sessionId String    @id @default(uuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model AuthAttempt {
+  attemptKey      String    @id
+  count           Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  lockedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@map("auth_attempts")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  actorUserId Int?
+  action      String
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+  ip          String?
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
 }
 
 model Client {

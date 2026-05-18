@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   getUserRoleLabel,
   normalizeUserRole,
@@ -14,6 +15,20 @@ type SessionUserIdentity = {
 type SessionUserFallback = {
   phone: string;
   role: string;
+};
+
+type AuthSessionRow = {
+  sessionId: string;
+  userId: number;
+  expiresAt: Date;
+  revokedAt: Date | null;
+};
+
+type CreateAuthSessionInput = {
+  userId: number;
+  expiresAt: Date;
+  userAgent: string | null;
+  ip: string | null;
 };
 
 async function findPersistedUserById(userId: number) {
@@ -52,12 +67,70 @@ async function findEmployeeDisplayName(loginId: string) {
   ).catch(() => ({ rows: [] as Array<{ name: string }> }));
 }
 
+export async function createAuthSession(input: CreateAuthSessionInput) {
+  const sessionId = randomUUID();
+
+  await pool.query(
+    `
+      INSERT INTO "sessions" ("sessionId", "userId", "expiresAt", "userAgent", "ip")
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+    [sessionId, input.userId, input.expiresAt, input.userAgent, input.ip],
+  );
+
+  return sessionId;
+}
+
+export async function findActiveAuthSession(sessionId: string, userId: number) {
+  const result = await pool.query<AuthSessionRow>(
+    `
+      SELECT "sessionId", "userId", "expiresAt", "revokedAt"
+      FROM "sessions"
+      WHERE "sessionId" = $1
+        AND "userId" = $2
+        AND "revokedAt" IS NULL
+        AND "expiresAt" > NOW()
+      LIMIT 1
+    `,
+    [sessionId, userId],
+  ).catch(() => ({ rows: [] as AuthSessionRow[] }));
+
+  return result.rows[0] ?? null;
+}
+
+export async function revokeAuthSession(sessionId: string, userId: number) {
+  await pool.query(
+    `
+      UPDATE "sessions"
+      SET "revokedAt" = NOW()
+      WHERE "sessionId" = $1
+        AND "userId" = $2
+        AND "revokedAt" IS NULL
+    `,
+    [sessionId, userId],
+  );
+}
+
+export async function revokeOtherAuthSessions(userId: number, activeSessionId: string | null) {
+  await pool.query(
+    `
+      UPDATE "sessions"
+      SET "revokedAt" = NOW()
+      WHERE "userId" = $1
+        AND "revokedAt" IS NULL
+        AND ($2::text IS NULL OR "sessionId" <> $2)
+    `,
+    [userId, activeSessionId],
+  );
+}
+
 export async function resolveSessionUserIdentity(
   userId: number,
   fallback: SessionUserFallback,
 ): Promise<SessionUserIdentity | null> {
   const userResult = await findPersistedUserById(userId);
   const persistedUser = userResult.rows[0];
+
   const resolvedPhone = persistedUser?.phone?.trim() || fallback.phone;
   const role =
     normalizeUserRole(persistedUser?.role) ??

@@ -1,6 +1,9 @@
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import type { SessionUser } from "@backend/modules/auth/auth.types";
-import { resolveSessionUserIdentity } from "@backend/modules/auth/auth.session.repository";
+import {
+  findActiveAuthSession,
+  resolveSessionUserIdentity,
+} from "@backend/modules/auth/auth.session.repository";
 import {
   getPermissionsForRole,
   hasApiPermission,
@@ -14,6 +17,7 @@ import { AuthorizationError } from "@backend/lib/http-errors";
 declare module "fastify" {
   interface FastifyRequest {
     authUser: AuthenticatedApiUser | null;
+    authSessionId: string | null;
   }
 }
 
@@ -36,12 +40,24 @@ function getRequestToken(request: FastifyRequest) {
 }
 
 async function buildAuthUser(payload: {
+  sessionId?: string;
   userId: number;
   phone: string;
   email?: string;
   role: string;
+  issuedAt?: number;
 }): Promise<AuthenticatedApiUser | null> {
   const loginId = payload.phone || payload.email || "";
+
+  if (!payload.sessionId) {
+    return null;
+  }
+
+  const session = await findActiveAuthSession(payload.sessionId, payload.userId);
+
+  if (!session) {
+    return null;
+  }
 
   const identity = await resolveSessionUserIdentity(payload.userId, {
     phone: loginId,
@@ -74,6 +90,7 @@ export async function resolveAuthUser(request: FastifyRequest) {
 
   if (!token) {
     request.authUser = null;
+    request.authSessionId = null;
     return null;
   }
 
@@ -81,10 +98,12 @@ export async function resolveAuthUser(request: FastifyRequest) {
 
   if (!payload) {
     request.authUser = null;
+    request.authSessionId = null;
     return null;
   }
 
   request.authUser = await buildAuthUser(payload);
+  request.authSessionId = request.authUser ? payload.sessionId : null;
   return request.authUser;
 }
 

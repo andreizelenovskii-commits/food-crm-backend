@@ -38,6 +38,9 @@ available PostgreSQL database.
 ## Notes
 
 - API prefix: `/api/v1`
+- Branch flow: `feature branch -> dev -> staging -> main -> production`. In this repo CI runs on PRs and pushes to `dev`; deploy runs from `dev` to staging and from `main` to production.
+- Order business rules: `docs/ORDER_BUSINESS_RULES.md`
+- Inventory business rules: `docs/inventory-rules.md`
 - Auth supports both:
   - `Authorization: Bearer <token>`
   - httpOnly session cookie

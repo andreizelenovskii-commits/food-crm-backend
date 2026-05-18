@@ -1,9 +1,17 @@
 import type { FastifyInstance } from "fastify";
-import { authenticateUser } from "@backend/modules/auth/auth.service";
+import { authenticateUser, changeUserPassword } from "@backend/modules/auth/auth.service";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import { getPermissionsForRole } from "@backend/modules/access/access-control";
 import { authenticateRequest, resolveAuthUser } from "@backend/modules/auth/auth-context";
-import { createApiSessionToken, getSessionMaxAgeSeconds } from "@backend/modules/auth/session-token";
+import {
+  createApiSessionToken,
+  getApiSessionExpiresAt,
+  getSessionMaxAgeSeconds,
+} from "@backend/modules/auth/session-token";
+import {
+  createAuthSession,
+  revokeAuthSession,
+} from "@backend/modules/auth/auth.session.repository";
 import { backendEnv } from "@backend/config/env";
 import { getRequestBody, getStringBodyField } from "@backend/lib/request";
 import { parseLoginPhone } from "@backend/lib/phone";
@@ -25,6 +33,11 @@ function getRequestIp(headers: Record<string, unknown>, fallback: string) {
 
 function getHeaderValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function getUserAgent(headers: Record<string, unknown>) {
+  const userAgent = headers["user-agent"];
+  return typeof userAgent === "string" && userAgent.trim() ? userAgent.trim() : null;
 }
 
 function getSessionCookieDomain(request: { hostname: string; headers: Record<string, unknown> }) {
@@ -73,10 +86,20 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       undefined,
       { ipAddress: getRequestIp(request.headers, request.ip) },
     );
+    const expiresAt = getApiSessionExpiresAt();
+    const sessionId = await createAuthSession({
+      userId: user.id,
+      expiresAt: new Date(expiresAt),
+      userAgent: getUserAgent(request.headers),
+      ip: getRequestIp(request.headers, request.ip),
+    });
     const session = createApiSessionToken({
+      sessionId,
       userId: user.id,
       phone: user.phone,
       role: user.role,
+    }, {
+      expiresAt,
     });
 
     reply.setCookie(backendEnv.sessionCookieName, session.token, {
@@ -100,11 +123,37 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/api/v1/auth/logout", { preHandler: authenticateRequest }, async (_request, reply) => {
+  app.post("/api/v1/auth/logout", { preHandler: authenticateRequest }, async (request, reply) => {
+    const user = await resolveAuthUser(request);
+
+    if (user && request.authSessionId) {
+      await revokeAuthSession(request.authSessionId, user.id);
+    }
+
     reply.clearCookie(backendEnv.sessionCookieName, {
-      domain: getSessionCookieDomain(_request),
+      domain: getSessionCookieDomain(request),
       path: "/",
     });
+    return { data: { success: true } };
+  });
+
+  app.post("/api/v1/auth/change-password", { preHandler: authenticateRequest }, async (request) => {
+    const user = await resolveAuthUser(request);
+
+    if (!user) {
+      throw new ValidationError("Authentication required");
+    }
+
+    const body = getRequestBody(request);
+    const currentPassword = getStringBodyField(body, "currentPassword");
+    const newPassword = getStringBodyField(body, "newPassword");
+
+    await changeUserPassword(user.id, {
+      currentPassword,
+      newPassword,
+      activeSessionId: request.authSessionId,
+    });
+
     return { data: { success: true } };
   });
 

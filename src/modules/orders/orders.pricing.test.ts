@@ -47,3 +47,20 @@ test("calculateOrderPricing clamps invalid discount input", () => {
     0,
   );
 });
+
+test("calculateOrderPricing clamps negative delivery and subtotal", () => {
+  assert.deepEqual(
+    calculateOrderPricing({
+      itemsTotalCents: -10000,
+      deliveryFeeCents: -17000,
+      discountPercent: Number.NaN,
+      isInternal: false,
+    }),
+    {
+      subtotalCents: 0,
+      deliveryFeeCents: 0,
+      discountCents: 0,
+      totalCents: 0,
+    },
+  );
+});

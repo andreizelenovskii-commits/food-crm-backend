@@ -4,6 +4,7 @@ import {
   canAdvanceOrder,
   canCancelOrder,
   canCreateOrders,
+  getOrderStageOwner,
   getNextOrderStatus,
   isOrderClosed,
 } from "@backend/modules/orders/orders.workflow";
@@ -14,6 +15,14 @@ test("order workflow exposes only the allowed forward path", () => {
   assert.equal(getNextOrderStatus("PACKED"), "DELIVERED_PAID");
   assert.equal(getNextOrderStatus("DELIVERED_PAID"), null);
   assert.equal(getNextOrderStatus("CANCELLED"), null);
+});
+
+test("order workflow documents stage owners", () => {
+  assert.equal(getOrderStageOwner("SENT_TO_KITCHEN"), "Повар");
+  assert.equal(getOrderStageOwner("READY"), "Диспетчер");
+  assert.equal(getOrderStageOwner("PACKED"), "Курьер");
+  assert.equal(getOrderStageOwner("DELIVERED_PAID"), null);
+  assert.equal(getOrderStageOwner("CANCELLED"), null);
 });
 
 test("role ownership gates order status transitions", () => {
@@ -32,10 +41,15 @@ test("managers can advance active orders but nobody advances closed orders", () 
 });
 
 test("cancel and creation permissions match business roles", () => {
+  assert.equal(canCancelOrder("SENT_TO_KITCHEN", "Диспетчер"), true);
   assert.equal(canCancelOrder("READY", "Диспетчер"), true);
   assert.equal(canCancelOrder("READY", "Повар"), false);
+  assert.equal(canCancelOrder("PACKED", "Управляющий"), true);
   assert.equal(canCancelOrder("DELIVERED_PAID", "Управляющий"), false);
+  assert.equal(canCancelOrder("CANCELLED", "admin"), false);
   assert.equal(canCreateOrders("Диспетчер"), true);
+  assert.equal(canCreateOrders("Управляющий"), true);
   assert.equal(canCreateOrders("Курьер"), false);
   assert.equal(isOrderClosed("CANCELLED"), true);
+  assert.equal(isOrderClosed("DELIVERED_PAID"), true);
 });

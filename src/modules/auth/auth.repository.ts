@@ -20,6 +20,7 @@ type CreateUserInput = {
 };
 
 export interface AuthUserRepository {
+  findById(userId: number): Promise<AuthUser | null>;
   findByPhone(phone: string): Promise<AuthUser | null>;
   /** Логин: мобильный 7XXXXXXXXXX или legacy email, хранящийся в User.phone. */
   findByLoginKey(login: string): Promise<AuthUser | null>;
@@ -40,6 +41,22 @@ function mapRowToAuthUser(row: UserRow): AuthUser {
 }
 
 class PgAuthUserRepository implements AuthUserRepository {
+  async findById(userId: number) {
+    const result = await pool.query<UserRow>(
+      `
+        SELECT "id", "phone", "password", "role"
+        FROM "User"
+        WHERE "id" = $1
+        LIMIT 1
+      `,
+      [userId],
+    );
+
+    const row = result.rows[0];
+
+    return row ? mapRowToAuthUser(row) : null;
+  }
+
   async findByPhone(phone: string) {
     const result = await pool.query<UserRow>(
       `
@@ -99,7 +116,7 @@ class PgAuthUserRepository implements AuthUserRepository {
     await pool.query(
       `
         UPDATE "User"
-        SET "password" = $2
+        SET "password" = $2, "passwordUpdatedAt" = NOW()
         WHERE "id" = $1
       `,
       [userId, passwordHash],
@@ -117,7 +134,7 @@ class PgAuthUserRepository implements AuthUserRepository {
       await pool.query(
         `
           UPDATE "User"
-          SET "phone" = $2, "role" = $3, "password" = $4
+          SET "phone" = $2, "role" = $3, "password" = $4, "passwordUpdatedAt" = NOW()
           WHERE "id" = $1
         `,
         [userId, normalizedPhone, input.role, input.passwordHash],

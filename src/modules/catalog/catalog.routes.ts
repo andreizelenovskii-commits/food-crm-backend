@@ -11,6 +11,7 @@ import {
 import { parseCatalogItemInput } from "@backend/modules/catalog/catalog.validation";
 import { requirePermission } from "@backend/modules/auth/auth-context";
 import { getNumericParam, getRequestBody, toFormData } from "@backend/lib/request";
+import { writeAuditLog } from "@backend/modules/audit/audit-log";
 
 const CATALOG_FIELDS = [
   "name",
@@ -56,7 +57,15 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
 
   app.post("/api/v1/catalog", { preHandler: requirePermission("manage_catalog") }, async (request) => {
     const input = parseCatalogItemInput(toFormData(getRequestBody(request), CATALOG_FIELDS));
-    return { data: await addCatalogItem(input) };
+    const item = await addCatalogItem(input);
+    await writeAuditLog({
+      request,
+      action: "catalog_item.create",
+      entityType: "catalog_item",
+      entityId: item.id,
+      after: item,
+    });
+    return { data: item };
   });
 
   app.get("/api/v1/catalog/:itemId", { preHandler: requirePermission("view_catalog") }, async (request) => ({
@@ -64,11 +73,33 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
   }));
 
   app.patch("/api/v1/catalog/:itemId", { preHandler: requirePermission("manage_catalog") }, async (request) => {
+    const itemId = getNumericParam(request, "itemId");
+    const before = await fetchCatalogItemById(itemId);
     const input = parseCatalogItemInput(toFormData(getRequestBody(request), CATALOG_FIELDS));
-    return { data: await updateCatalogItemById(getNumericParam(request, "itemId"), input) };
+    const item = await updateCatalogItemById(itemId, input);
+    await writeAuditLog({
+      request,
+      action: "catalog_item.update",
+      entityType: "catalog_item",
+      entityId: itemId,
+      before,
+      after: item,
+    });
+    return { data: item };
   });
 
-  app.delete("/api/v1/catalog/:itemId", { preHandler: requirePermission("manage_catalog") }, async (request) => ({
-    data: { deleted: await deleteCatalogItemById(getNumericParam(request, "itemId")) },
-  }));
+  app.delete("/api/v1/catalog/:itemId", { preHandler: requirePermission("manage_catalog") }, async (request) => {
+    const itemId = getNumericParam(request, "itemId");
+    const before = await fetchCatalogItemById(itemId);
+    const deleted = await deleteCatalogItemById(itemId);
+    await writeAuditLog({
+      request,
+      action: "catalog_item.delete",
+      entityType: "catalog_item",
+      entityId: itemId,
+      before,
+      after: { deleted },
+    });
+    return { data: { deleted } };
+  });
 }

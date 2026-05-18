@@ -28,6 +28,7 @@ import {
 import { ValidationError } from "@backend/shared/errors/app-error";
 import { authenticateRequest, requirePermission } from "@backend/modules/auth/auth-context";
 import { getNumericParam, getRequestBody, getStringBodyField, toFormData } from "@backend/lib/request";
+import { writeAuditLog } from "@backend/modules/audit/audit-log";
 
 export async function registerOrdersRoutes(app: FastifyInstance) {
   app.post("/api/v1/public/orders", async (request) => {
@@ -87,16 +88,25 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
     formData.set("status", INITIAL_ORDER_STATUS);
     const input = parseCreateOrderInput(formData);
 
+    const order = await addOrder({
+      ...input,
+      status: INITIAL_ORDER_STATUS,
+      deliveryFeeCents: input.isInternal
+        ? 0
+        : canAdjustDeliveryFee(user.role)
+          ? input.deliveryFeeCents
+          : DEFAULT_DELIVERY_FEE_CENTS,
+    });
+    await writeAuditLog({
+      request,
+      action: "order.create",
+      entityType: "order",
+      entityId: order.id,
+      after: order,
+    });
+
     return {
-      data: await addOrder({
-        ...input,
-        status: INITIAL_ORDER_STATUS,
-        deliveryFeeCents: input.isInternal
-          ? 0
-          : canAdjustDeliveryFee(user.role)
-            ? input.deliveryFeeCents
-            : DEFAULT_DELIVERY_FEE_CENTS,
-      }),
+      data: order,
     };
   });
 
@@ -130,8 +140,16 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
       throw new ValidationError("У вашей роли нет права перевести заказ в этот статус");
     }
 
-    return {
-      data: await updateOrderStatusById(orderId, nextStatus as OrderStatus, user.id),
-    };
+    const updatedOrder = await updateOrderStatusById(orderId, nextStatus as OrderStatus, user.id);
+    await writeAuditLog({
+      request,
+      action: nextStatus === "CANCELLED" ? "order.cancel" : "order.status.change",
+      entityType: "order",
+      entityId: orderId,
+      before: order,
+      after: updatedOrder,
+    });
+
+    return { data: updatedOrder };
   });
 }
