@@ -16,6 +16,7 @@ const TECH_CARD_FIELDS = [
   "name",
   "category",
   "pizzaSize",
+  "autoCreatePizzaVariants",
   "outputQuantity",
   "outputUnit",
   "description",

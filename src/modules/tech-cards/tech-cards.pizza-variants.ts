@@ -6,7 +6,7 @@ const VARIANT_SIZES = ["26 см", "24 см"] as const;
 const PIZZA_SIZE_FACTOR = 0.85;
 
 export function shouldCreatePizzaVariants(input: TechCardInput) {
-  return input.category === PIZZA_CATEGORY && input.pizzaSize === BASE_PIZZA_SIZE;
+  return input.autoCreatePizzaVariants && input.category === PIZZA_CATEGORY && input.pizzaSize === BASE_PIZZA_SIZE;
 }
 
 export function getPizzaVariantSizes() {

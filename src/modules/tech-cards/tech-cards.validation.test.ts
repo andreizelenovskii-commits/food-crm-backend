@@ -40,3 +40,20 @@ test("parseTechCardInput allows fractional piece output", () => {
   assert.equal(input.outputQuantity, 1.5);
   assert.equal(input.outputUnit, "шт");
 });
+
+test("parseTechCardInput reads pizza variant toggle", () => {
+  const formData = new FormData();
+  formData.set("name", "Маргарита");
+  formData.set("category", "Пиццы");
+  formData.set("pizzaSize", "30 см");
+  formData.set("autoCreatePizzaVariants", "false");
+  formData.set("outputQuantity", "1");
+  formData.set("outputUnit", "шт");
+  formData.append("ingredientProductId", "1");
+  formData.append("ingredientQuantity", "0.3");
+  formData.append("ingredientUnit", "кг");
+
+  const input = parseTechCardInput(formData);
+
+  assert.equal(input.autoCreatePizzaVariants, false);
+});
