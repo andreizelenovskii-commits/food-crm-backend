@@ -215,7 +215,7 @@ model TechnologicalCard {
   name           String
   category       String
   pizzaSize      String?
-  outputQuantity Int
+  outputQuantity Float
   outputUnit     String
   description    String?
   createdAt      DateTime             @default(now())

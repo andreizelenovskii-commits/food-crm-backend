@@ -10,6 +10,10 @@ function normalizeInput(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
 
+function parseDecimalInput(value: FormDataEntryValue | null) {
+  return Number(normalizeInput(value).replace(",", "."));
+}
+
 function normalizeTechCardName(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -34,7 +38,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
   const name = normalizeTechCardName(normalizeInput(formData.get("name")));
   const category = normalizeInput(formData.get("category"));
   const pizzaSize = normalizeInput(formData.get("pizzaSize"));
-  const outputQuantity = Number(normalizeInput(formData.get("outputQuantity")));
+  const outputQuantity = parseDecimalInput(formData.get("outputQuantity"));
   const outputUnit = normalizeInput(formData.get("outputUnit"));
   const description = normalizeInput(formData.get("description"));
   const ingredientProductIds = formData
@@ -43,7 +47,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     .filter((value) => Number.isFinite(value) && value > 0);
   const ingredientQuantities = formData
     .getAll("ingredientQuantity")
-    .map((value) => Number(normalizeInput(value)));
+    .map((value) => parseDecimalInput(value));
   const ingredientUnits = formData
     .getAll("ingredientUnit")
     .map((value) => normalizeInput(value));
@@ -113,7 +117,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     name,
     category: category as TechCardCategory,
     pizzaSize: category === "Пиццы" ? (pizzaSize as TechCardPizzaSize) : null,
-    outputQuantity: Math.round(outputQuantity),
+    outputQuantity: Math.round(outputQuantity * 1000) / 1000,
     outputUnit,
     description: description || null,
     ingredients,
