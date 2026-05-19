@@ -2,6 +2,7 @@ import { pool } from "@backend/shared/db/pool";
 import { withTransaction } from "@backend/shared/db/transaction";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import type { InventorySessionActualInput } from "@backend/modules/inventory/inventory.validation";
+import { assertNonNegativeStock } from "@backend/modules/inventory/inventory.stock-guard";
 
 export async function saveInventorySessionActuals(
   sessionId: number,
@@ -145,6 +146,8 @@ export async function deleteInventorySession(sessionId: number) {
 
   const itemsResult = await pool.query<{
     productId: number;
+    productName: string;
+    productUnit: string;
     stockQuantity: number;
     actualQuantity: number | null;
     currentStockQuantity: number;
@@ -152,6 +155,8 @@ export async function deleteInventorySession(sessionId: number) {
     `
       SELECT
         i."productId",
+        p."name" AS "productName",
+        p."unit" AS "productUnit",
         i."stockQuantity",
         i."actualQuantity",
         p."stockQuantity" AS "currentStockQuantity"
@@ -171,6 +176,12 @@ export async function deleteInventorySession(sessionId: number) {
 
       const revertedQuantity =
         item.currentStockQuantity + (item.stockQuantity - item.actualQuantity);
+      assertNonNegativeStock(revertedQuantity, {
+        productName: item.productName,
+        productUnit: item.productUnit,
+        availableQuantity: item.currentStockQuantity,
+        requiredQuantity: item.actualQuantity - item.stockQuantity,
+      });
 
       await client.query(
         `
@@ -178,7 +189,7 @@ export async function deleteInventorySession(sessionId: number) {
           SET "stockQuantity" = $2
           WHERE "id" = $1
         `,
-        [item.productId, Math.max(0, revertedQuantity)],
+        [item.productId, revertedQuantity],
       );
     }
 

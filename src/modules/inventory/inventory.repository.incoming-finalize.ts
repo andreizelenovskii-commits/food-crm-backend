@@ -5,6 +5,10 @@ import {
   calculateWeightedAveragePriceCents,
   mapMissingWriteoffTables,
 } from "@backend/modules/inventory/inventory.repository.internals";
+import {
+  assertNonNegativeStock,
+  assertStockCanDecrease,
+} from "@backend/modules/inventory/inventory.stock-guard";
 
 export async function completeIncomingAct(actId: number) {
   try {
@@ -53,24 +57,38 @@ export async function completeIncomingAct(actId: number) {
 
     await withTransaction(async (client) => {
       for (const item of itemsResult.rows) {
-        const productResult = await client.query<{ stockQuantity: number; priceCents: number }>(
+        const productResult = await client.query<{
+          name: string;
+          unit: string;
+          stockQuantity: number;
+          priceCents: number;
+        }>(
           `
-            SELECT "stockQuantity", "priceCents"
+            SELECT "name", "unit", "stockQuantity", "priceCents"
             FROM "Product"
             WHERE "id" = $1
+            FOR UPDATE
             LIMIT 1
           `,
           [item.productId],
         );
 
-        const currentStockQuantity = productResult.rows[0]?.stockQuantity;
-        const currentPriceCents = productResult.rows[0]?.priceCents;
+        const product = productResult.rows[0];
+        const currentStockQuantity = product?.stockQuantity;
+        const currentPriceCents = product?.priceCents;
 
         if (typeof currentStockQuantity !== "number" || typeof currentPriceCents !== "number") {
           throw new ValidationError("Часть товаров из акта поступления уже недоступна");
         }
 
         const stockQuantityAfter = currentStockQuantity + item.quantity;
+        assertNonNegativeStock(stockQuantityAfter, {
+          productName: product.name,
+          productUnit: product.unit,
+          availableQuantity: currentStockQuantity,
+          requiredQuantity: Math.max(0, -currentStockQuantity),
+        });
+
         const nextPriceCents = calculateWeightedAveragePriceCents(
           currentStockQuantity,
           currentPriceCents,
@@ -151,23 +169,34 @@ export async function deleteIncomingAct(actId: number) {
     await withTransaction(async (client) => {
       if (act.completedAt) {
         for (const item of itemsResult.rows) {
-          const productResult = await client.query<{ stockQuantity: number }>(
+          const productResult = await client.query<{
+            name: string;
+            unit: string;
+            stockQuantity: number;
+          }>(
             `
-              SELECT "stockQuantity"
+              SELECT "name", "unit", "stockQuantity"
               FROM "Product"
               WHERE "id" = $1
+              FOR UPDATE
               LIMIT 1
             `,
             [item.productId],
           );
 
-          const currentStockQuantity = productResult.rows[0]?.stockQuantity;
+          const product = productResult.rows[0];
+          const currentStockQuantity = product?.stockQuantity;
 
           if (typeof currentStockQuantity !== "number") {
             throw new ValidationError(
               "Часть товаров из акта поступления уже недоступна, остатки скорректировать нельзя",
             );
           }
+
+          assertStockCanDecrease(currentStockQuantity, item.quantity, {
+            productName: product.name,
+            productUnit: product.unit,
+          });
 
           await client.query(
             `

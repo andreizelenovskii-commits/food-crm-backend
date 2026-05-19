@@ -5,6 +5,7 @@ import type { WriteoffActSummary } from "@backend/modules/inventory/inventory.ty
 import type { CreateWriteoffActInput } from "@backend/modules/inventory/inventory.validation";
 import { mapMissingWriteoffTables } from "@backend/modules/inventory/inventory.repository.internals";
 import { getWriteoffActs } from "@backend/modules/inventory/inventory.repository.writeoff-read";
+import { assertStockCanDecrease } from "@backend/modules/inventory/inventory.stock-guard";
 
 export async function createWriteoffAct(
   input: CreateWriteoffActInput,
@@ -156,21 +157,32 @@ export async function completeWriteoffAct(actId: number) {
 
     await withTransaction(async (client) => {
       for (const item of itemsResult.rows) {
-        const productResult = await client.query<{ stockQuantity: number; priceCents: number }>(
+        const productResult = await client.query<{
+          name: string;
+          unit: string;
+          stockQuantity: number;
+        }>(
           `
-            SELECT "stockQuantity"
+            SELECT "name", "unit", "stockQuantity"
             FROM "Product"
             WHERE "id" = $1
+            FOR UPDATE
             LIMIT 1
           `,
           [item.productId],
         );
 
-        const currentStockQuantity = productResult.rows[0]?.stockQuantity;
+        const product = productResult.rows[0];
+        const currentStockQuantity = product?.stockQuantity;
 
         if (typeof currentStockQuantity !== "number") {
           throw new ValidationError("Часть товаров из акта списания уже недоступна");
         }
+
+        assertStockCanDecrease(currentStockQuantity, item.quantity, {
+          productName: product.name,
+          productUnit: product.unit,
+        });
 
         const stockQuantityAfter = currentStockQuantity - item.quantity;
 

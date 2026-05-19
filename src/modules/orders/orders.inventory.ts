@@ -1,9 +1,9 @@
 import type { PoolClient } from "pg";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import type { OrderStatus } from "@backend/modules/orders/orders.types";
+import { assertStockCanDecrease } from "@backend/modules/inventory/inventory.stock-guard";
 
 const STOCK_CONSUMPTION_STATUS: OrderStatus = "READY";
-const STOCK_EPSILON = 0.000001;
 
 type IngredientRequirement = {
   productId: number;
@@ -71,12 +71,10 @@ export async function consumeOrderStockForStatus(
       throw new ValidationError(`Ингредиент "${item.productName}" уже недоступен на складе`);
     }
 
-    if (currentStock + STOCK_EPSILON < item.requiredQuantity) {
-      throw new ValidationError(
-        `Недостаточно "${item.productName}": нужно ${formatQuantity(item.requiredQuantity)} ${item.productUnit}, ` +
-          `доступно ${formatQuantity(currentStock)} ${item.productUnit}`,
-      );
-    }
+    assertStockCanDecrease(currentStock, item.requiredQuantity, {
+      productName: item.productName,
+      productUnit: item.productUnit,
+    });
   }
 
   for (const item of requirements) {
@@ -206,10 +204,4 @@ function buildTechCardError(row: { itemName: string; issue: string }) {
   }
 
   return `Позиция "${row.itemName}" не связана с корректной техкартой`;
-}
-
-function formatQuantity(value: number) {
-  return value.toLocaleString("ru-RU", {
-    maximumFractionDigits: 3,
-  });
 }
