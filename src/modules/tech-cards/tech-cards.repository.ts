@@ -13,6 +13,11 @@ import {
   TECH_CARD_PIZZA_SIZES,
 } from "@backend/modules/tech-cards/tech-cards.types";
 import { insertTechCardIngredients } from "@backend/modules/tech-cards/tech-cards.repository.ingredients";
+import {
+  buildPizzaVariantInputs,
+  getPizzaVariantSizes,
+  shouldCreatePizzaVariants,
+} from "@backend/modules/tech-cards/tech-cards.pizza-variants";
 import { syncIngredientTechCardProduct } from "@backend/modules/tech-cards/tech-cards.repository.product-sync";
 import type { TechCardInput } from "@backend/modules/tech-cards/tech-cards.validation";
 type TechCardRow = {
@@ -186,6 +191,28 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
         throw new ValidationError(buildDuplicateTechCardMessage(input));
       }
 
+      if (shouldCreatePizzaVariants(input)) {
+        const existingVariants = await client.query<{ pizzaSize: string | null }>(
+          `
+            SELECT "pizzaSize"
+            FROM "TechnologicalCard"
+            WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
+              AND "pizzaSize" = ANY($2::text[])
+          `,
+          [input.name, getPizzaVariantSizes()],
+        );
+
+        if (existingVariants.rowCount) {
+          const sizes = existingVariants.rows
+            .map((row) => row.pizzaSize)
+            .filter(Boolean)
+            .join(", ");
+          throw new ValidationError(
+            `Нельзя автоматически создать варианты пиццы: техкарта "${input.name}" уже есть для размеров ${sizes}`,
+          );
+        }
+      }
+
       const cardResult = await client.query<TechCardRow>(
         `
           INSERT INTO "TechnologicalCard" ("name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description")
@@ -204,6 +231,29 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
 
       const card = cardResult.rows[0];
       const ingredients = await insertTechCardIngredients(client, card.id, input.ingredients);
+      const variantInputs = buildPizzaVariantInputs(input);
+
+      for (const variantInput of variantInputs) {
+        const variantCardResult = await client.query<TechCardRow>(
+          `
+            INSERT INTO "TechnologicalCard" ("name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description")
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING "id", "name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description", "createdAt"
+          `,
+          [
+            variantInput.name,
+            variantInput.category,
+            variantInput.pizzaSize,
+            variantInput.outputQuantity,
+            variantInput.outputUnit,
+            variantInput.description,
+          ],
+        );
+
+        const variantCard = variantCardResult.rows[0];
+        await insertTechCardIngredients(client, variantCard.id, variantInput.ingredients);
+      }
+
       await syncIngredientTechCardProduct(client, input);
 
       return mapTechCardRow(card, ingredients);
