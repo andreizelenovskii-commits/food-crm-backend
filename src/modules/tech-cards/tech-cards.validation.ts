@@ -1,5 +1,6 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
 import {
+  COMPOSITE_TECH_CARD_CATEGORIES,
   TECH_CARD_CATEGORIES,
   type TechCardCategory,
   TECH_CARD_PIZZA_SIZES,
@@ -26,6 +27,11 @@ export type TechCardIngredientInput = {
   unit: "кг" | "шт";
 };
 
+export type TechCardComponentInput = {
+  techCardId: number;
+  quantity: number;
+};
+
 export type TechCardInput = {
   name: string;
   category: TechCardCategory;
@@ -37,6 +43,7 @@ export type TechCardInput = {
   outputUnit: "кг" | "шт";
   description: string | null;
   ingredients: TechCardIngredientInput[];
+  components: TechCardComponentInput[];
 };
 
 export function parseTechCardInput(formData: FormData): TechCardInput {
@@ -59,6 +66,13 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
   const ingredientUnits = formData
     .getAll("ingredientUnit")
     .map((value) => normalizeInput(value));
+  const componentTechCardIds = formData
+    .getAll("componentTechCardId")
+    .map((value) => Number(normalizeInput(value)))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const componentQuantities = formData
+    .getAll("componentQuantity")
+    .map((value) => parseDecimalInput(value));
 
   if (!name || !category || !outputUnit || !Number.isFinite(outputQuantity) || outputQuantity <= 0) {
     throw new ValidationError("Заполните название, категорию, выход и единицу измерения техкарты");
@@ -88,7 +102,17 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     throw new ValidationError("Единица выхода техкарты должна быть кг или шт");
   }
 
-  if (ingredientProductIds.length === 0) {
+  const isCompositeCategory = COMPOSITE_TECH_CARD_CATEGORIES.includes(category as never);
+
+  if (isCompositeCategory && componentTechCardIds.length === 0) {
+    throw new ValidationError("Для комбинированной техкарты выберите категорию Комбо или Сеты и добавьте техкарты в состав");
+  }
+
+  if (!isCompositeCategory && componentTechCardIds.length > 0) {
+    throw new ValidationError("Готовые техкарты можно добавлять только в категории Комбо или Сеты");
+  }
+
+  if (!isCompositeCategory && ingredientProductIds.length === 0) {
     throw new ValidationError("Добавьте хотя бы один ингредиент в технологическую карту");
   }
 
@@ -97,6 +121,10 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     ingredientProductIds.length !== ingredientUnits.length
   ) {
     throw new ValidationError("Не удалось обработать список ингредиентов");
+  }
+
+  if (componentTechCardIds.length !== componentQuantities.length) {
+    throw new ValidationError("Не удалось обработать список компонентов");
   }
 
   const uniqueProductIds = new Set<number>();
@@ -124,6 +152,25 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
       unit,
     };
   });
+  const uniqueComponentIds = new Set<number>();
+  const components = componentTechCardIds.map<TechCardComponentInput>((techCardId, index) => {
+    const quantity = componentQuantities[index];
+
+    if (uniqueComponentIds.has(techCardId)) {
+      throw new ValidationError("Компоненты не должны повторяться в одной техкарте");
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new ValidationError("Количество каждого компонента должно быть положительным числом");
+    }
+
+    uniqueComponentIds.add(techCardId);
+
+    return {
+      techCardId,
+      quantity: Math.round(quantity * 1000) / 1000,
+    };
+  });
 
   return {
     name,
@@ -136,5 +183,6 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     outputUnit,
     description: description || null,
     ingredients,
+    components,
   };
 }

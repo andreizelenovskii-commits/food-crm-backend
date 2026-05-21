@@ -104,6 +104,9 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
           WHEN NOT EXISTS (
             SELECT 1 FROM "TechCardIngredient" tci
             WHERE tci."technologicalCardId" = ci."technologicalCardId"
+          ) AND NOT EXISTS (
+            SELECT 1 FROM "TechCardComponent" tcc
+            WHERE tcc."technologicalCardId" = ci."technologicalCardId"
           ) THEN 'ingredients'
           ELSE 'unknown'
         END AS "issue"
@@ -113,9 +116,15 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
       WHERE oi."orderId" = $1
         AND oi."catalogItemId" IS NOT NULL
         AND (
-          ci."id" IS NULL OR tc."outputQuantity" <= 0 OR NOT EXISTS (
+          ci."id" IS NULL OR tc."outputQuantity" <= 0 OR (
+            NOT EXISTS (
             SELECT 1 FROM "TechCardIngredient" tci
             WHERE tci."technologicalCardId" = ci."technologicalCardId"
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM "TechCardComponent" tcc
+              WHERE tcc."technologicalCardId" = ci."technologicalCardId"
+            )
           )
         )
     `,
@@ -130,17 +139,34 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
 async function getIngredientRequirements(client: PoolClient, orderId: number) {
   const result = await client.query<IngredientRequirement>(
     `
+      WITH RECURSIVE card_tree AS (
+        SELECT
+          tc."id" AS "cardId",
+          (oi."quantity"::numeric / NULLIF(tc."outputQuantity", 0)) AS "multiplier"
+        FROM "OrderItem" oi
+        INNER JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
+        INNER JOIN "TechnologicalCard" tc ON tc."id" = ci."technologicalCardId"
+        WHERE oi."orderId" = $1
+
+        UNION ALL
+
+        SELECT
+          child."id" AS "cardId",
+          card_tree."multiplier" * component."quantity" / NULLIF(child."outputQuantity", 0)
+        FROM card_tree
+        INNER JOIN "TechCardComponent" component
+          ON component."technologicalCardId" = card_tree."cardId"
+        INNER JOIN "TechnologicalCard" child
+          ON child."id" = component."componentTechnologicalCardId"
+      )
       SELECT
         p."id" AS "productId",
         p."name" AS "productName",
         p."unit" AS "productUnit",
-        SUM(oi."quantity" * tci."quantity" / tc."outputQuantity") AS "requiredQuantity"
-      FROM "OrderItem" oi
-      INNER JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
-      INNER JOIN "TechnologicalCard" tc ON tc."id" = ci."technologicalCardId"
-      INNER JOIN "TechCardIngredient" tci ON tci."technologicalCardId" = tc."id"
+        SUM(card_tree."multiplier" * tci."quantity") AS "requiredQuantity"
+      FROM card_tree
+      INNER JOIN "TechCardIngredient" tci ON tci."technologicalCardId" = card_tree."cardId"
       INNER JOIN "Product" p ON p."id" = tci."productId"
-      WHERE oi."orderId" = $1
       GROUP BY p."id", p."name", p."unit"
       ORDER BY p."name" ASC
     `,

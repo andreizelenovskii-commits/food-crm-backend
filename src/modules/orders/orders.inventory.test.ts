@@ -24,7 +24,7 @@ test("product -> tech card -> ingredients -> order consumes stock through the te
         return { rowCount: 0, rows: [] };
       }
 
-      if (text.includes('SUM(oi."quantity" * tci."quantity" / tc."outputQuantity")')) {
+      if (text.includes("WITH RECURSIVE card_tree")) {
         return {
           rowCount: 1,
           rows: [

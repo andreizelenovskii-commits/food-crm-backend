@@ -3,6 +3,7 @@ import { withTransaction } from "@backend/shared/db/transaction";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import type {
   TechCardCategory,
+  TechCardComponentItem,
   TechCardIngredientItem,
   TechCardItem,
   TechCardPizzaSize,
@@ -15,6 +16,11 @@ import {
   TECH_CARD_ROLL_SIZES,
 } from "@backend/modules/tech-cards/tech-cards.types";
 import { insertTechCardIngredients } from "@backend/modules/tech-cards/tech-cards.repository.ingredients";
+import {
+  insertTechCardComponents,
+  mapTechCardComponentRow,
+  type TechCardComponentRow,
+} from "@backend/modules/tech-cards/tech-cards.repository.components";
 import {
   buildPizzaVariantInputs,
   getPizzaVariantSizes,
@@ -61,7 +67,11 @@ type TechCardIngredientRow = {
   unit: "кг" | "шт";
 };
 
-function mapTechCardRow(row: TechCardRow, ingredients: TechCardIngredientItem[]): TechCardItem {
+function mapTechCardRow(
+  row: TechCardRow,
+  ingredients: TechCardIngredientItem[],
+  components: TechCardComponentItem[],
+): TechCardItem {
   return {
     id: row.id,
     name: row.name,
@@ -81,6 +91,7 @@ function mapTechCardRow(row: TechCardRow, ingredients: TechCardIngredientItem[])
     description: row.description,
     createdAt: row.createdAt.toISOString(),
     ingredients,
+    components,
   };
 }
 
@@ -126,6 +137,40 @@ async function getIngredientsForCards(cardIds: number[]) {
   }, {});
 }
 
+async function getComponentsForCards(cardIds: number[]) {
+  if (cardIds.length === 0) {
+    return {} as Record<number, TechCardComponentItem[]>;
+  }
+
+  const componentsResult = await pool.query<TechCardComponentRow>(
+    `
+      SELECT
+        c."id",
+        c."technologicalCardId",
+        c."componentTechnologicalCardId",
+        t."name" AS "techCardName",
+        t."category" AS "techCardCategory",
+        t."pizzaSize",
+        t."rollSize",
+        t."outputQuantity",
+        t."outputUnit",
+        c."quantity"
+      FROM "TechCardComponent" c
+      INNER JOIN "TechnologicalCard" t ON t."id" = c."componentTechnologicalCardId"
+      WHERE c."technologicalCardId" = ANY($1::int[])
+      ORDER BY c."id" ASC
+    `,
+    [cardIds],
+  );
+
+  return componentsResult.rows.reduce<Record<number, TechCardComponentItem[]>>((acc, row) => {
+    const current = acc[row.technologicalCardId] ?? [];
+    current.push(mapTechCardComponentRow(row));
+    acc[row.technologicalCardId] = current;
+    return acc;
+  }, {});
+}
+
 export async function getTechCardProductOptions(): Promise<TechCardProductOption[]> {
   const result = await pool.query<{ id: number; name: string; category: string | null; unit: string }>(
     `
@@ -152,8 +197,11 @@ export async function getTechCards(): Promise<TechCardItem[]> {
   }
 
   const ingredientsByCard = await getIngredientsForCards(cardsResult.rows.map((row) => row.id));
+  const componentsByCard = await getComponentsForCards(cardsResult.rows.map((row) => row.id));
 
-  return cardsResult.rows.map((row) => mapTechCardRow(row, ingredientsByCard[row.id] ?? []));
+  return cardsResult.rows.map((row) =>
+    mapTechCardRow(row, ingredientsByCard[row.id] ?? [], componentsByCard[row.id] ?? []),
+  );
 }
 
 export async function getTechCardById(id: number): Promise<TechCardItem | null> {
@@ -173,8 +221,9 @@ export async function getTechCardById(id: number): Promise<TechCardItem | null> 
 
   const card = cardResult.rows[0];
   const ingredientsByCard = await getIngredientsForCards([card.id]);
+  const componentsByCard = await getComponentsForCards([card.id]);
 
-  return mapTechCardRow(card, ingredientsByCard[card.id] ?? []);
+  return mapTechCardRow(card, ingredientsByCard[card.id] ?? [], componentsByCard[card.id] ?? []);
 }
 
 export async function getTechCardOptions(): Promise<Array<{ id: number; name: string; category: string; pizzaSize: string | null; rollSize: string | null }>> {
@@ -274,6 +323,7 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
 
       const card = cardResult.rows[0];
       const ingredients = await insertTechCardIngredients(client, card.id, input.ingredients);
+      const components = await insertTechCardComponents(client, card.id, input.components);
       const variantInputs = [...buildPizzaVariantInputs(input), ...buildRollVariantInputs(input)];
 
       for (const variantInput of variantInputs) {
@@ -300,7 +350,7 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
 
       await syncIngredientTechCardProduct(client, input);
 
-      return mapTechCardRow(card, ingredients);
+      return mapTechCardRow(card, ingredients, components);
     });
   } catch (error) {
     if (
@@ -375,11 +425,19 @@ export async function updateTechCard(id: number, input: TechCardInput): Promise<
         `,
         [id],
       );
+      await client.query(
+        `
+          DELETE FROM "TechCardComponent"
+          WHERE "technologicalCardId" = $1
+        `,
+        [id],
+      );
 
       const ingredients = await insertTechCardIngredients(client, id, input.ingredients);
+      const components = await insertTechCardComponents(client, id, input.components);
       await syncIngredientTechCardProduct(client, input, existingCard.rows[0]?.name);
 
-      return mapTechCardRow(cardResult.rows[0], ingredients);
+      return mapTechCardRow(cardResult.rows[0], ingredients, components);
     });
   } catch (error) {
     if (

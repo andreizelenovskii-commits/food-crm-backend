@@ -221,6 +221,8 @@ model TechnologicalCard {
   description    String?
   createdAt      DateTime             @default(now())
   ingredients    TechCardIngredient[]
+  components     TechCardComponent[]   @relation("TechCardComponents")
+  usedInCards     TechCardComponent[]   @relation("TechCardComponentSource")
   catalogItems   CatalogItem[]
 }
 
@@ -232,6 +234,18 @@ model TechCardIngredient {
   productId           Int
   quantity            Float
   unit                String
+}
+
+model TechCardComponent {
+  id                         Int               @id @default(autoincrement())
+  technologicalCard          TechnologicalCard @relation("TechCardComponents", fields: [technologicalCardId], references: [id])
+  technologicalCardId        Int
+  componentTechnologicalCard TechnologicalCard @relation("TechCardComponentSource", fields: [componentTechnologicalCardId], references: [id])
+  componentTechnologicalCardId Int
+  quantity                   Float
+
+  @@unique([technologicalCardId, componentTechnologicalCardId])
+  @@index([componentTechnologicalCardId])
 }
 
 model CatalogItem {

@@ -16,6 +16,19 @@ export async function deleteTechCard(id: number): Promise<boolean> {
       throw new ValidationError("Техкарта привязана к каталогу. Сначала отвяжите её от прайсовых позиций.");
     }
 
+    const linkedCompositeCards = await client.query<{ count: string }>(
+      `
+        SELECT COUNT(*)::text AS "count"
+        FROM "TechCardComponent"
+        WHERE "componentTechnologicalCardId" = $1
+      `,
+      [id],
+    );
+
+    if (Number(linkedCompositeCards.rows[0]?.count ?? 0) > 0) {
+      throw new ValidationError("Техкарта используется в комбинированной карте. Сначала уберите её из состава.");
+    }
+
     const existingCard = await client.query<{ id: number }>(
       `
         SELECT "id"
@@ -33,6 +46,13 @@ export async function deleteTechCard(id: number): Promise<boolean> {
     await client.query(
       `
         DELETE FROM "TechCardIngredient"
+        WHERE "technologicalCardId" = $1
+      `,
+      [id],
+    );
+    await client.query(
+      `
+        DELETE FROM "TechCardComponent"
         WHERE "technologicalCardId" = $1
       `,
       [id],

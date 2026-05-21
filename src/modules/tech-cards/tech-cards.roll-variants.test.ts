@@ -17,6 +17,7 @@ const baseRollInput: TechCardInput = {
   outputQuantity: 1,
   outputUnit: "шт",
   description: null,
+  components: [],
   ingredients: [
     { productId: 1, quantity: 0.2, unit: "кг" },
     { productId: 2, quantity: 0.5, unit: "шт" },

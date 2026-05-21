@@ -31,6 +31,10 @@ function techCardFormData(body: Record<string, unknown>) {
     quantity: "ingredientQuantity",
     unit: "ingredientUnit",
   });
+  appendItems(formData, body.components, {
+    techCardId: "componentTechCardId",
+    quantity: "componentQuantity",
+  });
   return formData;
 }
 
