@@ -102,15 +102,11 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
       throw new ValidationError("Количество каждого ингредиента должно быть положительным числом");
     }
 
-    if (unit === "шт" && !Number.isInteger(quantity)) {
-      throw new ValidationError("Для ингредиентов в штуках укажите целое количество");
-    }
-
     uniqueProductIds.add(productId);
 
     return {
       productId,
-      quantity: unit === "шт" ? Math.round(quantity) : Math.round(quantity * 1000) / 1000,
+      quantity: Math.round(quantity * 1000) / 1000,
       unit,
     };
   });
