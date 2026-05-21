@@ -7,10 +7,12 @@ import type {
   TechCardItem,
   TechCardPizzaSize,
   TechCardProductOption,
+  TechCardRollSize,
 } from "@backend/modules/tech-cards/tech-cards.types";
 import {
   TECH_CARD_CATEGORIES,
   TECH_CARD_PIZZA_SIZES,
+  TECH_CARD_ROLL_SIZES,
 } from "@backend/modules/tech-cards/tech-cards.types";
 import { insertTechCardIngredients } from "@backend/modules/tech-cards/tech-cards.repository.ingredients";
 import {
@@ -18,6 +20,11 @@ import {
   getPizzaVariantSizes,
   shouldCreatePizzaVariants,
 } from "@backend/modules/tech-cards/tech-cards.pizza-variants";
+import {
+  buildRollVariantInputs,
+  getRollVariantSizes,
+  shouldCreateRollVariants,
+} from "@backend/modules/tech-cards/tech-cards.roll-variants";
 import { syncIngredientTechCardProduct } from "@backend/modules/tech-cards/tech-cards.repository.product-sync";
 import type { TechCardInput } from "@backend/modules/tech-cards/tech-cards.validation";
 type TechCardRow = {
@@ -25,15 +32,20 @@ type TechCardRow = {
   name: string;
   category: TechCardCategory;
   pizzaSize: string | null;
+  rollSize: string | null;
   outputQuantity: number;
   outputUnit: string;
   description: string | null;
   createdAt: Date;
 };
 
-function buildDuplicateTechCardMessage(input: Pick<TechCardInput, "name" | "pizzaSize">) {
+function buildDuplicateTechCardMessage(input: Pick<TechCardInput, "name" | "pizzaSize" | "rollSize">) {
   if (input.pizzaSize) {
     return `Технологическая карта "${input.name}" с размером ${input.pizzaSize} уже существует`;
+  }
+
+  if (input.rollSize) {
+    return `Технологическая карта "${input.name}" на ${input.rollSize} уже существует`;
   }
 
   return `Технологическая карта "${input.name}" уже существует`;
@@ -59,6 +71,10 @@ function mapTechCardRow(row: TechCardRow, ingredients: TechCardIngredientItem[])
     pizzaSize:
       row.pizzaSize && TECH_CARD_PIZZA_SIZES.includes(row.pizzaSize as TechCardPizzaSize)
         ? (row.pizzaSize as TechCardPizzaSize)
+        : null,
+    rollSize:
+      row.rollSize && TECH_CARD_ROLL_SIZES.includes(row.rollSize as TechCardRollSize)
+        ? (row.rollSize as TechCardRollSize)
         : null,
     outputQuantity: row.outputQuantity,
     outputUnit: row.outputUnit,
@@ -125,7 +141,7 @@ export async function getTechCardProductOptions(): Promise<TechCardProductOption
 export async function getTechCards(): Promise<TechCardItem[]> {
   const cardsResult = await pool.query<TechCardRow>(
     `
-      SELECT "id", "name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description", "createdAt"
+      SELECT "id", "name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description", "createdAt"
       FROM "TechnologicalCard"
       ORDER BY "createdAt" DESC, "id" DESC
     `,
@@ -143,7 +159,7 @@ export async function getTechCards(): Promise<TechCardItem[]> {
 export async function getTechCardById(id: number): Promise<TechCardItem | null> {
   const cardResult = await pool.query<TechCardRow>(
     `
-      SELECT "id", "name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description", "createdAt"
+      SELECT "id", "name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description", "createdAt"
       FROM "TechnologicalCard"
       WHERE "id" = $1
       LIMIT 1
@@ -161,12 +177,12 @@ export async function getTechCardById(id: number): Promise<TechCardItem | null> 
   return mapTechCardRow(card, ingredientsByCard[card.id] ?? []);
 }
 
-export async function getTechCardOptions(): Promise<Array<{ id: number; name: string; category: string; pizzaSize: string | null }>> {
-  const result = await pool.query<{ id: number; name: string; category: string; pizzaSize: string | null }>(
+export async function getTechCardOptions(): Promise<Array<{ id: number; name: string; category: string; pizzaSize: string | null; rollSize: string | null }>> {
+  const result = await pool.query<{ id: number; name: string; category: string; pizzaSize: string | null; rollSize: string | null }>(
     `
-      SELECT "id", "name", "category", "pizzaSize"
+      SELECT "id", "name", "category", "pizzaSize", "rollSize"
       FROM "TechnologicalCard"
-      ORDER BY "category" ASC, "name" ASC, "pizzaSize" ASC NULLS LAST
+      ORDER BY "category" ASC, "name" ASC, "pizzaSize" ASC NULLS LAST, "rollSize" ASC NULLS LAST
     `,
   );
 
@@ -182,9 +198,10 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
           FROM "TechnologicalCard"
           WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
             AND COALESCE("pizzaSize", '') = COALESCE($2, '')
+            AND COALESCE("rollSize", '') = COALESCE($3, '')
           LIMIT 1
         `,
-        [input.name, input.pizzaSize],
+        [input.name, input.pizzaSize, input.rollSize],
       );
 
       if (existing.rowCount) {
@@ -213,16 +230,39 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
         }
       }
 
+      if (shouldCreateRollVariants(input)) {
+        const existingVariants = await client.query<{ rollSize: string | null }>(
+          `
+            SELECT "rollSize"
+            FROM "TechnologicalCard"
+            WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
+              AND "rollSize" = ANY($2::text[])
+          `,
+          [input.name, getRollVariantSizes()],
+        );
+
+        if (existingVariants.rowCount) {
+          const sizes = existingVariants.rows
+            .map((row) => row.rollSize)
+            .filter(Boolean)
+            .join(", ");
+          throw new ValidationError(
+            `Нельзя автоматически создать варианты ролла: техкарта "${input.name}" уже есть для ${sizes}`,
+          );
+        }
+      }
+
       const cardResult = await client.query<TechCardRow>(
         `
-          INSERT INTO "TechnologicalCard" ("name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description")
-          VALUES ($1, $2, $3, $4, $5, $6)
-          RETURNING "id", "name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description", "createdAt"
+          INSERT INTO "TechnologicalCard" ("name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description")
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING "id", "name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description", "createdAt"
         `,
         [
           input.name,
           input.category,
           input.pizzaSize,
+          input.rollSize,
           input.outputQuantity,
           input.outputUnit,
           input.description,
@@ -231,19 +271,20 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
 
       const card = cardResult.rows[0];
       const ingredients = await insertTechCardIngredients(client, card.id, input.ingredients);
-      const variantInputs = buildPizzaVariantInputs(input);
+      const variantInputs = [...buildPizzaVariantInputs(input), ...buildRollVariantInputs(input)];
 
       for (const variantInput of variantInputs) {
         const variantCardResult = await client.query<TechCardRow>(
           `
-            INSERT INTO "TechnologicalCard" ("name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description")
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING "id", "name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description", "createdAt"
+            INSERT INTO "TechnologicalCard" ("name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description")
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING "id", "name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description", "createdAt"
           `,
           [
             variantInput.name,
             variantInput.category,
             variantInput.pizzaSize,
+            variantInput.rollSize,
             variantInput.outputQuantity,
             variantInput.outputUnit,
             variantInput.description,
@@ -295,10 +336,11 @@ export async function updateTechCard(id: number, input: TechCardInput): Promise<
           FROM "TechnologicalCard"
           WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
             AND COALESCE("pizzaSize", '') = COALESCE($2, '')
-            AND "id" <> $3
+            AND COALESCE("rollSize", '') = COALESCE($3, '')
+            AND "id" <> $4
           LIMIT 1
         `,
-        [input.name, input.pizzaSize, id],
+        [input.name, input.pizzaSize, input.rollSize, id],
       );
 
       if (duplicate.rowCount) {
@@ -312,13 +354,14 @@ export async function updateTechCard(id: number, input: TechCardInput): Promise<
             "name" = $2,
             "category" = $3,
             "pizzaSize" = $4,
-            "outputQuantity" = $5,
-            "outputUnit" = $6,
-            "description" = $7
+            "rollSize" = $5,
+            "outputQuantity" = $6,
+            "outputUnit" = $7,
+            "description" = $8
           WHERE "id" = $1
-          RETURNING "id", "name", "category", "pizzaSize", "outputQuantity", "outputUnit", "description", "createdAt"
+          RETURNING "id", "name", "category", "pizzaSize", "rollSize", "outputQuantity", "outputUnit", "description", "createdAt"
         `,
-        [id, input.name, input.category, input.pizzaSize, input.outputQuantity, input.outputUnit, input.description],
+        [id, input.name, input.category, input.pizzaSize, input.rollSize, input.outputQuantity, input.outputUnit, input.description],
       );
 
       await client.query(

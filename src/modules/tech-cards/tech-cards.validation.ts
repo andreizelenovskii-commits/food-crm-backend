@@ -4,6 +4,8 @@ import {
   type TechCardCategory,
   TECH_CARD_PIZZA_SIZES,
   type TechCardPizzaSize,
+  TECH_CARD_ROLL_SIZES,
+  type TechCardRollSize,
 } from "@backend/modules/tech-cards/tech-cards.types";
 
 function normalizeInput(value: FormDataEntryValue | null) {
@@ -28,6 +30,7 @@ export type TechCardInput = {
   name: string;
   category: TechCardCategory;
   pizzaSize: TechCardPizzaSize | null;
+  rollSize: TechCardRollSize | null;
   autoCreatePizzaVariants: boolean;
   outputQuantity: number;
   outputUnit: "кг" | "шт";
@@ -39,6 +42,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
   const name = normalizeTechCardName(normalizeInput(formData.get("name")));
   const category = normalizeInput(formData.get("category"));
   const pizzaSize = normalizeInput(formData.get("pizzaSize"));
+  const rollSize = normalizeInput(formData.get("rollSize"));
   const autoCreatePizzaVariants = normalizeInput(formData.get("autoCreatePizzaVariants")) !== "false";
   const outputQuantity = parseDecimalInput(formData.get("outputQuantity"));
   const outputUnit = normalizeInput(formData.get("outputUnit"));
@@ -68,6 +72,14 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
 
   if (category !== "Пиццы" && pizzaSize) {
     throw new ValidationError("Размер пиццы можно указывать только для категории Пиццы");
+  }
+
+  if (category === "Роллы" && !TECH_CARD_ROLL_SIZES.includes(rollSize as TechCardRollSize)) {
+    throw new ValidationError("Для категории Роллы выберите количество штук");
+  }
+
+  if (category !== "Роллы" && rollSize) {
+    throw new ValidationError("Количество штук можно указывать только для категории Роллы");
   }
 
   if (outputUnit !== "кг" && outputUnit !== "шт") {
@@ -115,6 +127,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     name,
     category: category as TechCardCategory,
     pizzaSize: category === "Пиццы" ? (pizzaSize as TechCardPizzaSize) : null,
+    rollSize: category === "Роллы" ? (rollSize as TechCardRollSize) : null,
     autoCreatePizzaVariants,
     outputQuantity: Math.round(outputQuantity * 1000) / 1000,
     outputUnit,

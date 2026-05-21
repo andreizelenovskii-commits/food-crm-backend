@@ -57,3 +57,20 @@ test("parseTechCardInput reads pizza variant toggle", () => {
 
   assert.equal(input.autoCreatePizzaVariants, false);
 });
+
+test("parseTechCardInput reads roll size", () => {
+  const formData = new FormData();
+  formData.set("name", "Курай");
+  formData.set("category", "Роллы");
+  formData.set("rollSize", "8 шт");
+  formData.set("outputQuantity", "1");
+  formData.set("outputUnit", "шт");
+  formData.append("ingredientProductId", "1");
+  formData.append("ingredientQuantity", "0.2");
+  formData.append("ingredientUnit", "кг");
+
+  const input = parseTechCardInput(formData);
+
+  assert.equal(input.rollSize, "8 шт");
+  assert.equal(input.pizzaSize, null);
+});

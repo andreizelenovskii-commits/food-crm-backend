@@ -11,6 +11,7 @@ const basePizzaInput: TechCardInput = {
   name: "Маргарита",
   category: "Пиццы",
   pizzaSize: "30 см",
+  rollSize: null,
   autoCreatePizzaVariants: true,
   outputQuantity: 1,
   outputUnit: "шт",
@@ -25,7 +26,7 @@ test("pizza variants are created only from 30 cm pizza tech cards", () => {
   assert.equal(shouldCreatePizzaVariants(basePizzaInput), true);
   assert.equal(shouldCreatePizzaVariants({ ...basePizzaInput, autoCreatePizzaVariants: false }), false);
   assert.equal(shouldCreatePizzaVariants({ ...basePizzaInput, pizzaSize: "26 см" }), false);
-  assert.equal(shouldCreatePizzaVariants({ ...basePizzaInput, category: "Роллы", pizzaSize: null }), false);
+  assert.equal(shouldCreatePizzaVariants({ ...basePizzaInput, category: "Роллы", pizzaSize: null, rollSize: "8 шт" }), false);
 });
 
 test("pizza ingredient quantities scale by 15 percent for 26 and 24 cm variants", () => {

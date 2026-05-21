@@ -12,6 +12,7 @@ export type CatalogRow = {
   slug: string;
   category: string | null;
   pizzaSize: string | null;
+  rollSize: string | null;
   description: string | null;
   imageUrl: string | null;
   priceCents: number;
@@ -70,6 +71,7 @@ export function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
     priceListType: mapPriceListType(row.isPublished),
     category: row.category,
     pizzaSize: row.pizzaSize,
+    rollSize: row.rollSize,
     description: row.description,
     imageUrl: normalizeCatalogImageUrl(row.imageUrl),
     priceCents: row.priceCents,
@@ -80,9 +82,9 @@ export function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
 }
 
 export async function ensureCatalogTechCardExists(input: CatalogItemInput) {
-  const result = await pool.query<{ id: number; category: string; pizzaSize: string | null }>(
+  const result = await pool.query<{ id: number; category: string; pizzaSize: string | null; rollSize: string | null }>(
     `
-      SELECT "id", "category", "pizzaSize"
+      SELECT "id", "category", "pizzaSize", "rollSize"
       FROM "TechnologicalCard"
       WHERE "id" = $1
       LIMIT 1

@@ -215,6 +215,7 @@ model TechnologicalCard {
   name           String
   category       String
   pizzaSize      String?
+  rollSize       String?
   outputQuantity Float
   outputUnit     String
   description    String?
