@@ -13,6 +13,7 @@ const baseRollInput: TechCardInput = {
   pizzaSize: null,
   rollSize: "8 шт",
   autoCreatePizzaVariants: true,
+  autoCreateRollVariants: true,
   outputQuantity: 1,
   outputUnit: "шт",
   description: null,
@@ -24,6 +25,7 @@ const baseRollInput: TechCardInput = {
 
 test("roll variants are created only from 8 piece roll tech cards", () => {
   assert.equal(shouldCreateRollVariants(baseRollInput), true);
+  assert.equal(shouldCreateRollVariants({ ...baseRollInput, autoCreateRollVariants: false }), false);
   assert.equal(shouldCreateRollVariants({ ...baseRollInput, rollSize: "4 шт" }), false);
   assert.equal(shouldCreateRollVariants({ ...baseRollInput, category: "Пиццы", pizzaSize: "30 см", rollSize: null }), false);
 });

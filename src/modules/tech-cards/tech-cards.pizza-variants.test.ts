@@ -13,6 +13,7 @@ const basePizzaInput: TechCardInput = {
   pizzaSize: "30 см",
   rollSize: null,
   autoCreatePizzaVariants: true,
+  autoCreateRollVariants: true,
   outputQuantity: 1,
   outputUnit: "шт",
   description: null,

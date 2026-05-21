@@ -18,6 +18,7 @@ const TECH_CARD_FIELDS = [
   "pizzaSize",
   "rollSize",
   "autoCreatePizzaVariants",
+  "autoCreateRollVariants",
   "outputQuantity",
   "outputUnit",
   "description",

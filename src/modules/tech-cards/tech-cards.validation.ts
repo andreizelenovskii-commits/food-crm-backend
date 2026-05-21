@@ -32,6 +32,7 @@ export type TechCardInput = {
   pizzaSize: TechCardPizzaSize | null;
   rollSize: TechCardRollSize | null;
   autoCreatePizzaVariants: boolean;
+  autoCreateRollVariants: boolean;
   outputQuantity: number;
   outputUnit: "кг" | "шт";
   description: string | null;
@@ -44,6 +45,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
   const pizzaSize = normalizeInput(formData.get("pizzaSize"));
   const rollSize = normalizeInput(formData.get("rollSize"));
   const autoCreatePizzaVariants = normalizeInput(formData.get("autoCreatePizzaVariants")) !== "false";
+  const autoCreateRollVariants = normalizeInput(formData.get("autoCreateRollVariants")) !== "false";
   const outputQuantity = parseDecimalInput(formData.get("outputQuantity"));
   const outputUnit = normalizeInput(formData.get("outputUnit"));
   const description = normalizeInput(formData.get("description"));
@@ -129,6 +131,7 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     pizzaSize: category === "Пиццы" ? (pizzaSize as TechCardPizzaSize) : null,
     rollSize: category === "Роллы" ? (rollSize as TechCardRollSize) : null,
     autoCreatePizzaVariants,
+    autoCreateRollVariants,
     outputQuantity: Math.round(outputQuantity * 1000) / 1000,
     outputUnit,
     description: description || null,

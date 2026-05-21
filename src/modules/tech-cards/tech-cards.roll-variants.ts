@@ -6,7 +6,7 @@ const VARIANT_SIZES = ["4 шт"] as const;
 const ROLL_SIZE_FACTOR = 0.5;
 
 export function shouldCreateRollVariants(input: TechCardInput) {
-  return input.category === ROLL_CATEGORY && input.rollSize === BASE_ROLL_SIZE;
+  return input.autoCreateRollVariants && input.category === ROLL_CATEGORY && input.rollSize === BASE_ROLL_SIZE;
 }
 
 export function getRollVariantSizes() {
