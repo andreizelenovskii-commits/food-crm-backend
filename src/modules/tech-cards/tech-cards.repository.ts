@@ -39,16 +39,16 @@ type TechCardRow = {
   createdAt: Date;
 };
 
-function buildDuplicateTechCardMessage(input: Pick<TechCardInput, "name" | "pizzaSize" | "rollSize">) {
+function buildDuplicateTechCardMessage(input: Pick<TechCardInput, "name" | "category" | "pizzaSize" | "rollSize">) {
   if (input.pizzaSize) {
-    return `Технологическая карта "${input.name}" с размером ${input.pizzaSize} уже существует`;
+    return `Технологическая карта "${input.name}" в категории ${input.category} с размером ${input.pizzaSize} уже существует`;
   }
 
   if (input.rollSize) {
-    return `Технологическая карта "${input.name}" на ${input.rollSize} уже существует`;
+    return `Технологическая карта "${input.name}" в категории ${input.category} на ${input.rollSize} уже существует`;
   }
 
-  return `Технологическая карта "${input.name}" уже существует`;
+  return `Технологическая карта "${input.name}" в категории ${input.category} уже существует`;
 }
 
 type TechCardIngredientRow = {
@@ -197,11 +197,12 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
           SELECT "id"
           FROM "TechnologicalCard"
           WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
-            AND COALESCE("pizzaSize", '') = COALESCE($2, '')
-            AND COALESCE("rollSize", '') = COALESCE($3, '')
+            AND "category" = $2
+            AND COALESCE("pizzaSize", '') = COALESCE($3, '')
+            AND COALESCE("rollSize", '') = COALESCE($4, '')
           LIMIT 1
         `,
-        [input.name, input.pizzaSize, input.rollSize],
+        [input.name, input.category, input.pizzaSize, input.rollSize],
       );
 
       if (existing.rowCount) {
@@ -214,9 +215,10 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
             SELECT "pizzaSize"
             FROM "TechnologicalCard"
             WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
-              AND "pizzaSize" = ANY($2::text[])
+              AND "category" = $2
+              AND "pizzaSize" = ANY($3::text[])
           `,
-          [input.name, getPizzaVariantSizes()],
+          [input.name, input.category, getPizzaVariantSizes()],
         );
 
         if (existingVariants.rowCount) {
@@ -236,9 +238,10 @@ export async function createTechCard(input: TechCardInput): Promise<TechCardItem
             SELECT "rollSize"
             FROM "TechnologicalCard"
             WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
-              AND "rollSize" = ANY($2::text[])
+              AND "category" = $2
+              AND "rollSize" = ANY($3::text[])
           `,
-          [input.name, getRollVariantSizes()],
+          [input.name, input.category, getRollVariantSizes()],
         );
 
         if (existingVariants.rowCount) {
@@ -335,12 +338,13 @@ export async function updateTechCard(id: number, input: TechCardInput): Promise<
           SELECT "id"
           FROM "TechnologicalCard"
           WHERE LOWER(REGEXP_REPLACE(TRIM("name"), '\s+', ' ', 'g')) = LOWER($1)
-            AND COALESCE("pizzaSize", '') = COALESCE($2, '')
-            AND COALESCE("rollSize", '') = COALESCE($3, '')
-            AND "id" <> $4
+            AND "category" = $2
+            AND COALESCE("pizzaSize", '') = COALESCE($3, '')
+            AND COALESCE("rollSize", '') = COALESCE($4, '')
+            AND "id" <> $5
           LIMIT 1
         `,
-        [input.name, input.pizzaSize, input.rollSize, id],
+        [input.name, input.category, input.pizzaSize, input.rollSize, id],
       );
 
       if (duplicate.rowCount) {
