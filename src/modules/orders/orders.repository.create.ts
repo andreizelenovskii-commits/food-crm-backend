@@ -54,12 +54,27 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       throw new ValidationError("Сотрудник не найден");
     }
 
-    const catalogItemIds = input.items.map((item) => item.catalogItemId);
+    const catalogItemIds = [
+      ...new Set([
+        ...input.items.map((item) => item.catalogItemId),
+        ...input.items.flatMap((item) =>
+          (item.choices ?? []).map((choice) => choice.selectedCatalogItemId),
+        ),
+      ]),
+    ];
     const catalogItemsResult = await client.query<CatalogOrderItemRow>(
       `
-        SELECT "id", "name", "priceCents", "isPublished"
-        FROM "CatalogItem"
-        WHERE "id" = ANY($1::int[])
+        SELECT
+          c."id",
+          c."name",
+          c."priceCents",
+          c."isPublished",
+          c."technologicalCardId",
+          t."pizzaSize",
+          t."rollSize"
+        FROM "CatalogItem" c
+        INNER JOIN "TechnologicalCard" t ON t."id" = c."technologicalCardId"
+        WHERE c."id" = ANY($1::int[])
       `,
       [catalogItemIds],
     );
@@ -70,6 +85,110 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
 
     const catalogItemsById = new Map(catalogItemsResult.rows.map((item) => [item.id, item]));
     const expectedIsPublished = !input.isInternal;
+    const orderChoicesByCatalogItemId = new Map<number, Array<{
+      choiceSlotId: number;
+      selectedTechnologicalCardId: number;
+      quantity: number;
+    }>>();
+    const choiceLabelsByCatalogItemId = new Map<number, string[]>();
+
+    for (const item of input.items) {
+      const rootCatalogItem = catalogItemsById.get(item.catalogItemId);
+
+      if (!rootCatalogItem) {
+        continue;
+      }
+
+      const slotsResult = await client.query<{
+        id: number;
+        name: string;
+        category: string;
+        allowedPizzaSizes: string[];
+        quantity: number;
+      }>(
+        `
+          SELECT "id", "name", "category", "allowedPizzaSizes", "quantity"
+          FROM "TechCardChoiceSlot"
+          WHERE "technologicalCardId" = $1
+          ORDER BY "id" ASC
+        `,
+        [rootCatalogItem.technologicalCardId],
+      );
+      const choices = item.choices ?? [];
+
+      if (slotsResult.rowCount !== choices.length) {
+        throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
+      }
+
+      const preparedChoices = slotsResult.rows.map((slot) => {
+        const choice = choices.find((entry) => entry.choiceSlotId === slot.id);
+        const selectedCatalogItem = choice
+          ? catalogItemsById.get(choice.selectedCatalogItemId)
+          : null;
+
+        if (!choice || !selectedCatalogItem) {
+          throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
+        }
+
+        if (selectedCatalogItem.isPublished !== expectedIsPublished) {
+          throw new ValidationError("Вариант комбо должен быть из того же прайса, что и заказ");
+        }
+
+        return {
+          choiceSlotId: slot.id,
+          selectedCatalogItem,
+          slot,
+        };
+      });
+
+      if (preparedChoices.length > 0) {
+        choiceLabelsByCatalogItemId.set(
+          item.catalogItemId,
+          preparedChoices.map((choice) => {
+            const variant = choice.selectedCatalogItem.pizzaSize ?? choice.selectedCatalogItem.rollSize;
+            return `${choice.slot.name}: ${choice.selectedCatalogItem.name}${variant ? ` ${variant}` : ""}`;
+          }),
+        );
+        const selectedTechCardsResult = await client.query<{
+          id: number;
+          category: string;
+          pizzaSize: string | null;
+        }>(
+          `
+            SELECT "id", "category", "pizzaSize"
+            FROM "TechnologicalCard"
+            WHERE "id" = ANY($1::int[])
+          `,
+          [preparedChoices.map((choice) => choice.selectedCatalogItem.technologicalCardId)],
+        );
+        const selectedTechCardsById = new Map(selectedTechCardsResult.rows.map((techCard) => [techCard.id, techCard]));
+
+        orderChoicesByCatalogItemId.set(
+          item.catalogItemId,
+          preparedChoices.map((choice) => {
+            const selectedTechCard = selectedTechCardsById.get(choice.selectedCatalogItem.technologicalCardId);
+
+            if (!selectedTechCard || selectedTechCard.category !== choice.slot.category) {
+              throw new ValidationError("Выбранный вариант комбо не подходит по категории");
+            }
+
+            if (
+              choice.slot.allowedPizzaSizes.length > 0 &&
+              !choice.slot.allowedPizzaSizes.includes(selectedTechCard.pizzaSize ?? "")
+            ) {
+              throw new ValidationError("Выбранный вариант комбо не подходит по размеру");
+            }
+
+            return {
+              choiceSlotId: choice.slot.id,
+              selectedTechnologicalCardId: selectedTechCard.id,
+              quantity: choice.slot.quantity,
+            };
+          }),
+        );
+      }
+    }
+
     const orderItems = input.items.map((item) => {
       const catalogItem = catalogItemsById.get(item.catalogItemId);
 
@@ -87,7 +206,10 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
 
       return {
         catalogItemId: catalogItem.id,
-        itemName: catalogItem.name,
+        itemName: [
+          catalogItem.name,
+          ...(choiceLabelsByCatalogItemId.get(catalogItem.id) ?? []),
+        ].join(" · "),
         quantity: item.quantity,
         unitPriceCents: catalogItem.priceCents,
         totalPriceCents: catalogItem.priceCents * item.quantity,
@@ -166,7 +288,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
     const order = result.rows[0];
 
     for (const item of orderItems) {
-      await client.query(
+      const insertedItem = await client.query<{ id: number }>(
         `
           INSERT INTO "OrderItem" (
             "orderId",
@@ -177,6 +299,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
             "totalPriceCents"
           )
           VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING "id"
         `,
         [
           order.id,
@@ -187,6 +310,26 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           item.totalPriceCents,
         ],
       );
+
+      for (const choice of orderChoicesByCatalogItemId.get(item.catalogItemId) ?? []) {
+        await client.query(
+          `
+            INSERT INTO "OrderItemChoice" (
+              "orderItemId",
+              "choiceSlotId",
+              "selectedTechnologicalCardId",
+              "quantity"
+            )
+            VALUES ($1, $2, $3, $4)
+          `,
+          [
+            insertedItem.rows[0].id,
+            choice.choiceSlotId,
+            choice.selectedTechnologicalCardId,
+            choice.quantity,
+          ],
+        );
+      }
     }
 
     if (pricing.deliveryFeeCents > 0) {

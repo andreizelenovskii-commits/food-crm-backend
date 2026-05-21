@@ -53,6 +53,14 @@ export type TechCardComponentItem = {
   quantity: number;
 };
 
+export type TechCardChoiceSlotItem = {
+  id: number;
+  name: string;
+  category: string;
+  allowedPizzaSizes: TechCardPizzaSize[];
+  quantity: number;
+};
+
 export type TechCardItem = {
   id: number;
   name: string;
@@ -65,6 +73,7 @@ export type TechCardItem = {
   createdAt: string;
   ingredients: TechCardIngredientItem[];
   components: TechCardComponentItem[];
+  choiceSlots: TechCardChoiceSlotItem[];
 };
 
 export type TechCardProductOption = {

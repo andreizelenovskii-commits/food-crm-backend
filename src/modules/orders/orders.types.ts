@@ -18,6 +18,12 @@ export type OrderSource = "SITE" | "PHONE" | "ADMIN";
 export type OrderDraftItem = {
   catalogItemId: number;
   quantity: number;
+  choices?: OrderDraftItemChoice[];
+};
+
+export type OrderDraftItemChoice = {
+  choiceSlotId: number;
+  selectedCatalogItemId: number;
 };
 
 export type OrderListItem = {

@@ -35,6 +35,12 @@ function techCardFormData(body: Record<string, unknown>) {
     techCardId: "componentTechCardId",
     quantity: "componentQuantity",
   });
+  appendItems(formData, body.choiceSlots, {
+    name: "choiceSlotName",
+    category: "choiceSlotCategory",
+    allowedPizzaSizes: "choiceSlotAllowedPizzaSizes",
+    quantity: "choiceSlotQuantity",
+  });
   return formData;
 }
 

@@ -18,6 +18,7 @@ const basePizzaInput: TechCardInput = {
   outputUnit: "шт",
   description: null,
   components: [],
+  choiceSlots: [],
   ingredients: [
     { productId: 1, quantity: 0.3, unit: "кг" },
     { productId: 2, quantity: 2, unit: "шт" },

@@ -208,6 +208,22 @@ model OrderItem {
   quantity        Int
   unitPriceCents  Int
   totalPriceCents Int
+  choices         OrderItemChoice[]
+}
+
+model OrderItemChoice {
+  id                         Int               @id @default(autoincrement())
+  orderItem                  OrderItem         @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItemId                Int
+  choiceSlot                 TechCardChoiceSlot @relation(fields: [choiceSlotId], references: [id])
+  choiceSlotId               Int
+  selectedTechnologicalCard  TechnologicalCard @relation("OrderItemSelectedTechCardChoices", fields: [selectedTechnologicalCardId], references: [id])
+  selectedTechnologicalCardId Int
+  quantity                   Float
+
+  @@unique([orderItemId, choiceSlotId])
+  @@index([choiceSlotId])
+  @@index([selectedTechnologicalCardId])
 }
 
 model TechnologicalCard {
@@ -223,6 +239,8 @@ model TechnologicalCard {
   ingredients    TechCardIngredient[]
   components     TechCardComponent[]   @relation("TechCardComponents")
   usedInCards     TechCardComponent[]   @relation("TechCardComponentSource")
+  choiceSlots    TechCardChoiceSlot[]
+  selectedInOrderChoices OrderItemChoice[] @relation("OrderItemSelectedTechCardChoices")
   catalogItems   CatalogItem[]
 }
 
@@ -246,6 +264,19 @@ model TechCardComponent {
 
   @@unique([technologicalCardId, componentTechnologicalCardId])
   @@index([componentTechnologicalCardId])
+}
+
+model TechCardChoiceSlot {
+  id                  Int               @id @default(autoincrement())
+  technologicalCard   TechnologicalCard @relation(fields: [technologicalCardId], references: [id], onDelete: Cascade)
+  technologicalCardId Int
+  name                String
+  category            String
+  allowedPizzaSizes   String[]          @default([])
+  quantity            Float
+  orderItemChoices    OrderItemChoice[]
+
+  @@index([technologicalCardId])
 }
 
 model CatalogItem {

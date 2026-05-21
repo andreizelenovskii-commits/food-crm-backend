@@ -28,6 +28,9 @@ export type CatalogOrderItemRow = {
   name: string;
   priceCents: number;
   isPublished: boolean;
+  technologicalCardId: number;
+  pizzaSize: string | null;
+  rollSize: string | null;
 };
 
 export const DELIVERY_ITEM_NAME = "Доставка";

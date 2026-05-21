@@ -32,6 +32,13 @@ export type TechCardComponentInput = {
   quantity: number;
 };
 
+export type TechCardChoiceSlotInput = {
+  name: string;
+  category: TechCardCategory;
+  allowedPizzaSizes: TechCardPizzaSize[];
+  quantity: number;
+};
+
 export type TechCardInput = {
   name: string;
   category: TechCardCategory;
@@ -44,6 +51,7 @@ export type TechCardInput = {
   description: string | null;
   ingredients: TechCardIngredientInput[];
   components: TechCardComponentInput[];
+  choiceSlots: TechCardChoiceSlotInput[];
 };
 
 export function parseTechCardInput(formData: FormData): TechCardInput {
@@ -72,6 +80,23 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     .filter((value) => Number.isFinite(value) && value > 0);
   const componentQuantities = formData
     .getAll("componentQuantity")
+    .map((value) => parseDecimalInput(value));
+  const choiceSlotNames = formData
+    .getAll("choiceSlotName")
+    .map((value) => normalizeInput(value));
+  const choiceSlotCategories = formData
+    .getAll("choiceSlotCategory")
+    .map((value) => normalizeInput(value));
+  const choiceSlotAllowedPizzaSizes = formData
+    .getAll("choiceSlotAllowedPizzaSizes")
+    .map((value) =>
+      normalizeInput(value)
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    );
+  const choiceSlotQuantities = formData
+    .getAll("choiceSlotQuantity")
     .map((value) => parseDecimalInput(value));
 
   if (!name || !category || !outputUnit || !Number.isFinite(outputQuantity) || outputQuantity <= 0) {
@@ -104,11 +129,11 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
 
   const isCompositeCategory = COMPOSITE_TECH_CARD_CATEGORIES.includes(category as never);
 
-  if (isCompositeCategory && componentTechCardIds.length === 0) {
-    throw new ValidationError("Для комбинированной техкарты выберите категорию Комбо или Сеты и добавьте техкарты в состав");
+  if (isCompositeCategory && componentTechCardIds.length === 0 && choiceSlotNames.length === 0) {
+    throw new ValidationError("Для комбинированной техкарты выберите категорию Комбо или Сеты и добавьте техкарты или слоты выбора");
   }
 
-  if (!isCompositeCategory && componentTechCardIds.length > 0) {
+  if (!isCompositeCategory && (componentTechCardIds.length > 0 || choiceSlotNames.length > 0)) {
     throw new ValidationError("Готовые техкарты можно добавлять только в категории Комбо или Сеты");
   }
 
@@ -125,6 +150,14 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
 
   if (componentTechCardIds.length !== componentQuantities.length) {
     throw new ValidationError("Не удалось обработать список компонентов");
+  }
+
+  if (
+    choiceSlotNames.length !== choiceSlotCategories.length ||
+    choiceSlotNames.length !== choiceSlotAllowedPizzaSizes.length ||
+    choiceSlotNames.length !== choiceSlotQuantities.length
+  ) {
+    throw new ValidationError("Не удалось обработать слоты выбора");
   }
 
   const uniqueProductIds = new Set<number>();
@@ -171,6 +204,41 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
       quantity: Math.round(quantity * 1000) / 1000,
     };
   });
+  const uniqueChoiceSlotNames = new Set<string>();
+  const choiceSlots = choiceSlotNames.map<TechCardChoiceSlotInput>((slotName, index) => {
+    const slotCategory = choiceSlotCategories[index];
+    const quantity = choiceSlotQuantities[index];
+    const allowedPizzaSizes = choiceSlotAllowedPizzaSizes[index].filter((size): size is TechCardPizzaSize =>
+      TECH_CARD_PIZZA_SIZES.includes(size as TechCardPizzaSize),
+    );
+    const normalizedSlotName = normalizeTechCardName(slotName);
+    const slotKey = normalizedSlotName.toLowerCase();
+
+    if (!normalizedSlotName || !TECH_CARD_CATEGORIES.includes(slotCategory as TechCardCategory)) {
+      throw new ValidationError("Для каждого слота выбора укажите название и категорию");
+    }
+
+    if (uniqueChoiceSlotNames.has(slotKey)) {
+      throw new ValidationError("Слоты выбора не должны повторяться в одной техкарте");
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new ValidationError("Количество каждого слота выбора должно быть положительным числом");
+    }
+
+    if (slotCategory === "Пиццы" && allowedPizzaSizes.length === 0) {
+      throw new ValidationError("Для слота выбора пиццы укажите хотя бы один размер");
+    }
+
+    uniqueChoiceSlotNames.add(slotKey);
+
+    return {
+      name: normalizedSlotName,
+      category: slotCategory as TechCardCategory,
+      allowedPizzaSizes,
+      quantity: Math.round(quantity * 1000) / 1000,
+    };
+  });
 
   return {
     name,
@@ -184,5 +252,6 @@ export function parseTechCardInput(formData: FormData): TechCardInput {
     description: description || null,
     ingredients,
     components,
+    choiceSlots,
   };
 }

@@ -107,6 +107,18 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
           ) AND NOT EXISTS (
             SELECT 1 FROM "TechCardComponent" tcc
             WHERE tcc."technologicalCardId" = ci."technologicalCardId"
+          ) AND NOT EXISTS (
+            SELECT 1 FROM "TechCardChoiceSlot" tcs
+            WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+          ) THEN 'ingredients'
+          WHEN EXISTS (
+            SELECT 1 FROM "TechCardChoiceSlot" tcs
+            WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+              AND NOT EXISTS (
+                SELECT 1 FROM "OrderItemChoice" oic
+                WHERE oic."orderItemId" = oi."id"
+                  AND oic."choiceSlotId" = tcs."id"
+              )
           ) THEN 'ingredients'
           ELSE 'unknown'
         END AS "issue"
@@ -125,6 +137,18 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
               SELECT 1 FROM "TechCardComponent" tcc
               WHERE tcc."technologicalCardId" = ci."technologicalCardId"
             )
+            AND NOT EXISTS (
+              SELECT 1 FROM "TechCardChoiceSlot" tcs
+              WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+            )
+          ) OR EXISTS (
+            SELECT 1 FROM "TechCardChoiceSlot" tcs
+            WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+              AND NOT EXISTS (
+                SELECT 1 FROM "OrderItemChoice" oic
+                WHERE oic."orderItemId" = oi."id"
+                  AND oic."choiceSlotId" = tcs."id"
+              )
           )
         )
     `,
@@ -142,6 +166,7 @@ async function getIngredientRequirements(client: PoolClient, orderId: number) {
       WITH RECURSIVE card_tree AS (
         SELECT
           tc."id" AS "cardId",
+          oi."id" AS "orderItemId",
           (oi."quantity"::numeric / NULLIF(tc."outputQuantity", 0)) AS "multiplier"
         FROM "OrderItem" oi
         INNER JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
@@ -152,12 +177,28 @@ async function getIngredientRequirements(client: PoolClient, orderId: number) {
 
         SELECT
           child."id" AS "cardId",
+          card_tree."orderItemId",
           card_tree."multiplier" * component."quantity" / NULLIF(child."outputQuantity", 0)
         FROM card_tree
         INNER JOIN "TechCardComponent" component
           ON component."technologicalCardId" = card_tree."cardId"
         INNER JOIN "TechnologicalCard" child
           ON child."id" = component."componentTechnologicalCardId"
+
+        UNION ALL
+
+        SELECT
+          selected_child."id" AS "cardId",
+          card_tree."orderItemId",
+          card_tree."multiplier" * choice."quantity" / NULLIF(selected_child."outputQuantity", 0)
+        FROM card_tree
+        INNER JOIN "TechCardChoiceSlot" slot
+          ON slot."technologicalCardId" = card_tree."cardId"
+        INNER JOIN "OrderItemChoice" choice
+          ON choice."orderItemId" = card_tree."orderItemId"
+          AND choice."choiceSlotId" = slot."id"
+        INNER JOIN "TechnologicalCard" selected_child
+          ON selected_child."id" = choice."selectedTechnologicalCardId"
       )
       SELECT
         p."id" AS "productId",

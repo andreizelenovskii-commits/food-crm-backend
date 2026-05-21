@@ -36,4 +36,22 @@ export type CatalogItem = {
   createdAt: string;
   technologicalCardId: number;
   technologicalCardName: string;
+  choiceSlots: CatalogChoiceSlot[];
+};
+
+export type CatalogChoiceOption = {
+  catalogItemId: number;
+  name: string;
+  category: string | null;
+  pizzaSize: string | null;
+  rollSize: string | null;
+};
+
+export type CatalogChoiceSlot = {
+  id: number;
+  name: string;
+  category: string;
+  allowedPizzaSizes: string[];
+  quantity: number;
+  options: CatalogChoiceOption[];
 };

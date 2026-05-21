@@ -1,6 +1,7 @@
 import { pool } from "@backend/shared/db/pool";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import type {
+  CatalogChoiceSlot,
   CatalogItem,
   CatalogPriceListType,
 } from "@backend/modules/catalog/catalog.types";
@@ -64,7 +65,7 @@ export function buildCatalogSlug(
   return `${baseSlug}-${input.priceListType.toLowerCase()}-${input.technologicalCardId}`;
 }
 
-export function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
+export function mapRowToCatalogItem(row: CatalogRow, choiceSlots: CatalogChoiceSlot[] = []): CatalogItem {
   return {
     id: row.id,
     name: row.name,
@@ -78,6 +79,7 @@ export function mapRowToCatalogItem(row: CatalogRow): CatalogItem {
     createdAt: row.createdAt.toISOString(),
     technologicalCardId: row.technologicalCardId,
     technologicalCardName: row.technologicalCardName,
+    choiceSlots,
   };
 }
 

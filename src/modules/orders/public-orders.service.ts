@@ -38,6 +38,15 @@ export function parsePublicOrderInput(body: unknown): PublicOrderInput {
     .map((item) => ({
       catalogItemId: Number(item.catalogItemId),
       quantity: Number(item.quantity),
+      choices: Array.isArray(item.choices)
+        ? item.choices
+            .map((choice) => choice && typeof choice === "object" ? choice as Record<string, unknown> : {})
+            .map((choice) => ({
+              choiceSlotId: Number(choice.choiceSlotId),
+              selectedCatalogItemId: Number(choice.selectedCatalogItemId),
+            }))
+            .filter((choice) => Number.isInteger(choice.choiceSlotId) && Number.isInteger(choice.selectedCatalogItemId))
+        : [],
     }))
     .filter((item) => Number.isInteger(item.catalogItemId) && Number.isInteger(item.quantity));
 

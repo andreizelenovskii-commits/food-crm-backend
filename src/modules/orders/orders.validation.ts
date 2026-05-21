@@ -69,12 +69,28 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
   let items: OrderDraftItem[] = [];
 
   try {
-    const parsed = JSON.parse(itemsRaw) as Array<{ catalogItemId: number; quantity: number }>;
+    const parsed = JSON.parse(itemsRaw) as Array<{
+      catalogItemId: number;
+      quantity: number;
+      choices?: Array<{ choiceSlotId: number; selectedCatalogItemId: number }>;
+    }>;
     items = parsed
       .filter((item) => Number.isInteger(item.catalogItemId) && Number.isInteger(item.quantity))
       .map((item) => ({
         catalogItemId: item.catalogItemId,
         quantity: item.quantity,
+        choices: Array.isArray(item.choices)
+          ? item.choices
+              .filter(
+                (choice) =>
+                  Number.isInteger(choice.choiceSlotId) &&
+                  Number.isInteger(choice.selectedCatalogItemId),
+              )
+              .map((choice) => ({
+                choiceSlotId: choice.choiceSlotId,
+                selectedCatalogItemId: choice.selectedCatalogItemId,
+              }))
+          : [],
       }));
   } catch {
     throw new ValidationError("Не удалось прочитать состав заказа");
