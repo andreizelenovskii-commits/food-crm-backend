@@ -36,7 +36,7 @@ import { requirePermission } from "@backend/modules/auth/auth-context";
 import { appendItems, getNumericParam, getRequestBody, toFormData } from "@backend/lib/request";
 import { writeAuditLog } from "@backend/modules/audit/audit-log";
 
-const PRODUCT_FIELDS = ["name", "category", "unit", "stockQuantity", "price", "description"];
+const PRODUCT_FIELDS = ["name", "category", "kitchenZone", "unit", "stockQuantity", "price", "description"];
 
 function auditFormData(body: Record<string, unknown>) {
   const formData = new FormData();

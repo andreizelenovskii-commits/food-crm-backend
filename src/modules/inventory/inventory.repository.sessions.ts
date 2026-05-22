@@ -45,6 +45,7 @@ export async function createInventorySession(
         p."name",
         ${PRODUCT_SKU_SQL} AS "sku",
         p."category",
+        p."kitchenZone",
         p."unit",
         p."stockQuantity",
         p."priceCents",

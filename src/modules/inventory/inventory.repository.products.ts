@@ -28,6 +28,7 @@ export async function getProducts(): Promise<ProductItem[]> {
         p."name",
         ${PRODUCT_SKU_SQL} AS "sku",
         p."category",
+        p."kitchenZone",
         p."unit",
         p."stockQuantity",
         p."priceCents",
@@ -41,6 +42,7 @@ export async function getProducts(): Promise<ProductItem[]> {
         p."name",
         p."sku",
         p."category",
+        p."kitchenZone",
         p."unit",
         p."stockQuantity",
         p."priceCents",
@@ -85,6 +87,7 @@ export async function getProductById(productId: number): Promise<ProductItem | n
         p."name",
         ${PRODUCT_SKU_SQL} AS "sku",
         p."category",
+        p."kitchenZone",
         p."unit",
         p."stockQuantity",
         p."priceCents",
@@ -99,6 +102,7 @@ export async function getProductById(productId: number): Promise<ProductItem | n
         p."name",
         p."sku",
         p."category",
+        p."kitchenZone",
         p."unit",
         p."stockQuantity",
         p."priceCents",
@@ -118,13 +122,14 @@ export async function createProduct(input: ProductInput): Promise<ProductItem> {
     return await withTransaction(async (client) => {
       const insertedProduct = await client.query<{ id: number }>(
         `
-          INSERT INTO "Product" ("name", "category", "unit", "stockQuantity", "priceCents", "description")
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO "Product" ("name", "category", "kitchenZone", "unit", "stockQuantity", "priceCents", "description")
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
           RETURNING "id"
         `,
         [
           input.name,
           input.category,
+          input.kitchenZone,
           input.unit,
           input.stockQuantity,
           input.priceCents,
@@ -143,7 +148,7 @@ export async function createProduct(input: ProductInput): Promise<ProductItem> {
           UPDATE "Product"
           SET "sku" = CONCAT('PRD-', LPAD($2::text, 5, '0'))
           WHERE "id" = $1
-          RETURNING "id", "name", "sku", "category", "unit", "stockQuantity", "priceCents", "description", "createdAt"
+          RETURNING "id", "name", "sku", "category", "kitchenZone", "unit", "stockQuantity", "priceCents", "description", "createdAt"
         `,
         [createdProductId, createdProductId],
       );
@@ -175,17 +180,19 @@ export async function updateProduct(productId: number, input: ProductInput): Pro
         SET
           "name" = $2,
           "category" = $3,
-          "unit" = $4,
-          "stockQuantity" = $5,
-          "priceCents" = $6,
-          "description" = $7
+          "kitchenZone" = $4,
+          "unit" = $5,
+          "stockQuantity" = $6,
+          "priceCents" = $7,
+          "description" = $8
         WHERE "id" = $1
-        RETURNING "id", "name", "sku", "category", "unit", "stockQuantity", "priceCents", "description", "createdAt"
+        RETURNING "id", "name", "sku", "category", "kitchenZone", "unit", "stockQuantity", "priceCents", "description", "createdAt"
       `,
       [
         productId,
         input.name,
         input.category,
+        input.kitchenZone,
         input.unit,
         input.stockQuantity,
         input.priceCents,
@@ -205,7 +212,7 @@ export async function deleteProduct(productId: number): Promise<boolean> {
   }
 
   const usageResult = await pool.query<{
-    source: "orders" | "techCards" | "inventorySessions" | "incomingActs" | "writeoffActs";
+    source: "orders" | "techCards" | "inventorySessions" | "incomingActs" | "writeoffActs" | "packagingUsages";
     count: string;
   }>(
     `
@@ -222,6 +229,8 @@ export async function deleteProduct(productId: number): Promise<boolean> {
       SELECT 'incomingActs' AS source, COUNT(*) AS count FROM "IncomingActItem" WHERE "productId" = $1
       UNION ALL
       SELECT 'writeoffActs' AS source, COUNT(*) AS count FROM "WriteoffActItem" WHERE "productId" = $1
+      UNION ALL
+      SELECT 'packagingUsages' AS source, COUNT(*) AS count FROM "OrderPackagingUsage" WHERE "packageProductId" = $1
     `,
     [productId],
   );
@@ -232,6 +241,7 @@ export async function deleteProduct(productId: number): Promise<boolean> {
     inventorySessions: "инвентаризациях",
     incomingActs: "актах поступления",
     writeoffActs: "актах списания",
+    packagingUsages: "использованной упаковке",
   };
   const usages = usageResult.rows
     .filter((row) => Number(row.count) > 0)

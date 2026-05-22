@@ -26,6 +26,30 @@ export type OrderDraftItemChoice = {
   selectedCatalogItemId: number;
 };
 
+export type KitchenZone = "pizza" | "rolls" | "fastfood";
+
+export type OrderPackagingUsage = {
+  id: number;
+  orderItemId: number;
+  unitIndex: number;
+  packageProductId: number;
+  packageProductName: string;
+  kitchenZone: KitchenZone;
+  createdAt: string;
+};
+
+export type OrderItemSummary = {
+  id: number;
+  catalogItemId: number | null;
+  itemName: string;
+  quantity: number;
+  unitPriceCents: number;
+  totalPriceCents: number;
+  catalogCategory: string | null;
+  kitchenZone: KitchenZone | null;
+  packagingUsages: OrderPackagingUsage[];
+};
+
 export type OrderListItem = {
   id: number;
   status: OrderStatus;
@@ -43,6 +67,7 @@ export type OrderListItem = {
   discountPercent: number;
   totalCents: number;
   createdAt: string;
+  items: OrderItemSummary[];
 };
 
 export type OrderCreateInput = {

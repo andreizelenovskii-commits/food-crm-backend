@@ -1,5 +1,8 @@
 import type {
+  KitchenZone,
+  OrderItemSummary,
   OrderListItem,
+  OrderPackagingUsage,
   OrderSource,
   OrderStatus,
 } from "@backend/modules/orders/orders.types";
@@ -31,6 +34,27 @@ export type CatalogOrderItemRow = {
   technologicalCardId: number;
   pizzaSize: string | null;
   rollSize: string | null;
+};
+
+export type OrderItemRow = {
+  id: number;
+  orderId: number;
+  catalogItemId: number | null;
+  itemName: string;
+  quantity: number;
+  unitPriceCents: number;
+  totalPriceCents: number;
+  catalogCategory: string | null;
+};
+
+export type OrderPackagingUsageRow = {
+  id: number;
+  orderItemId: number;
+  unitIndex: number;
+  packageProductId: number;
+  packageProductName: string;
+  kitchenZone: string;
+  createdAt: Date;
 };
 
 export const DELIVERY_ITEM_NAME = "Доставка";
@@ -82,6 +106,58 @@ export function mapRowToOrder(row: OrderRow): OrderListItem {
     subtotalCents: row.subtotalCents,
     discountPercent: row.discountPercent,
     totalCents: row.totalCents,
+    createdAt: row.createdAt.toISOString(),
+    items: [],
+  };
+}
+
+export function resolveKitchenZone(category: string | null): KitchenZone | null {
+  switch ((category ?? "").trim().toLowerCase()) {
+    case "пицца":
+    case "пиццы":
+      return "pizza";
+    case "роллы":
+    case "ролл":
+    case "онигири":
+    case "суши-доги":
+      return "rolls";
+    case "фастфуд":
+    case "фаст фуд":
+      return "fastfood";
+    default:
+      return null;
+  }
+}
+
+export function normalizeKitchenZone(value: string): KitchenZone {
+  return value === "pizza" || value === "rolls" || value === "fastfood" ? value : "fastfood";
+}
+
+export function mapOrderItem(
+  row: OrderItemRow,
+  packagingUsages: OrderPackagingUsage[],
+): OrderItemSummary {
+  return {
+    id: row.id,
+    catalogItemId: row.catalogItemId,
+    itemName: row.itemName,
+    quantity: row.quantity,
+    unitPriceCents: row.unitPriceCents,
+    totalPriceCents: row.totalPriceCents,
+    catalogCategory: row.catalogCategory,
+    kitchenZone: resolveKitchenZone(row.catalogCategory),
+    packagingUsages,
+  };
+}
+
+export function mapPackagingUsage(row: OrderPackagingUsageRow): OrderPackagingUsage {
+  return {
+    id: row.id,
+    orderItemId: row.orderItemId,
+    unitIndex: row.unitIndex,
+    packageProductId: row.packageProductId,
+    packageProductName: row.packageProductName,
+    kitchenZone: normalizeKitchenZone(row.kitchenZone),
     createdAt: row.createdAt.toISOString(),
   };
 }

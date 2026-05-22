@@ -1,7 +1,9 @@
 import { fetchClients } from "@backend/modules/clients/clients.service";
 import { fetchCatalogItems } from "@backend/modules/catalog/catalog.service";
 import { fetchEmployees } from "@backend/modules/employees/employees.service";
+import { getProducts } from "@backend/modules/inventory/inventory.repository";
 import {
+  addOrderPackagingUsage,
   createOrder,
   getOrderById,
   getOrdersByClientId,
@@ -50,4 +52,20 @@ export async function updateOrderStatusById(
   actorUserId?: number,
 ) {
   return updateOrderStatus(orderId, status, actorUserId);
+}
+
+export async function fetchPackagingOptions() {
+  const products = await getProducts();
+
+  return products.filter((product) => product.category === "Упаковка" && product.kitchenZone);
+}
+
+export async function chooseOrderPackaging(input: {
+  orderId: number;
+  orderItemId: number;
+  unitIndex: number;
+  packageProductId: number;
+  actorUserId?: number;
+}) {
+  return addOrderPackagingUsage(input);
 }

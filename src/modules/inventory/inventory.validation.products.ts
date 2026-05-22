@@ -1,6 +1,8 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
 import {
+  KITCHEN_ZONES,
   PRODUCT_CATEGORIES,
+  type KitchenZone,
   type ProductCategory,
 } from "@backend/modules/inventory/inventory.types";
 import {
@@ -17,6 +19,7 @@ import type {
 export function parseProductInput(formData: FormData): ProductInput {
   const name = normalizeInput(formData.get("name"));
   const category = normalizeInput(formData.get("category"));
+  const kitchenZone = normalizeInput(formData.get("kitchenZone"));
   const unit = normalizeInput(formData.get("unit"));
   const stockQuantityRaw = normalizeInput(formData.get("stockQuantity"));
   const priceRaw = normalizeInput(formData.get("price"));
@@ -34,6 +37,14 @@ export function parseProductInput(formData: FormData): ProductInput {
     throw new ValidationError("Выберите единицу измерения: кг или шт");
   }
 
+  if (kitchenZone && !KITCHEN_ZONES.includes(kitchenZone as KitchenZone)) {
+    throw new ValidationError("Выберите кухонную зону из списка");
+  }
+
+  if (kitchenZone && category !== "Упаковка") {
+    throw new ValidationError("Кухонную зону можно указывать только для упаковки");
+  }
+
   const stockQuantity = parseDecimal(stockQuantityRaw || "0", "Остаток");
 
   if (stockQuantity < 0) {
@@ -43,6 +54,7 @@ export function parseProductInput(formData: FormData): ProductInput {
   return {
     name,
     category: category as ProductCategory,
+    kitchenZone: kitchenZone ? (kitchenZone as KitchenZone) : null,
     unit,
     stockQuantity,
     priceCents: parsePriceToCents(priceRaw),

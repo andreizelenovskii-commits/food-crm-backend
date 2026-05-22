@@ -13,6 +13,15 @@ export const PRODUCT_CATEGORIES = [
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 
+export const KITCHEN_ZONES = ["pizza", "rolls", "fastfood"] as const;
+export type KitchenZone = (typeof KITCHEN_ZONES)[number];
+
+export const KITCHEN_ZONE_LABELS: Record<KitchenZone, string> = {
+  pizza: "Пицца",
+  rolls: "Роллы",
+  fastfood: "Фастфуд",
+};
+
 export const WRITEOFF_REASONS = [
   "Брак",
   "Порча",
@@ -29,6 +38,7 @@ export type ProductItem = {
   name: string;
   sku: string | null;
   category: ProductCategory | null;
+  kitchenZone: KitchenZone | null;
   unit: string;
   stockQuantity: number;
   priceCents: number;

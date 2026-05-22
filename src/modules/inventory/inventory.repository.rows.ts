@@ -1,10 +1,11 @@
-import type { ProductCategory } from "@backend/modules/inventory/inventory.types";
+import type { KitchenZone, ProductCategory } from "@backend/modules/inventory/inventory.types";
 
 export type ProductRow = {
   id: number;
   name: string;
   sku: string | null;
   category: ProductCategory | null;
+  kitchenZone: KitchenZone | null;
   unit: string;
   stockQuantity: number;
   priceCents: number;

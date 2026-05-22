@@ -1,4 +1,5 @@
 import type {
+  KitchenZone,
   ProductCategory,
   WriteoffReason,
 } from "@backend/modules/inventory/inventory.types";
@@ -6,6 +7,7 @@ import type {
 export type ProductInput = {
   name: string;
   category: ProductCategory;
+  kitchenZone: KitchenZone | null;
   unit: "кг" | "шт";
   stockQuantity: number;
   priceCents: number;

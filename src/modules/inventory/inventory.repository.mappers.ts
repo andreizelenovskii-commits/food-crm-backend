@@ -24,6 +24,7 @@ export function mapRowToProduct(row: ProductRow): ProductItem {
     name: row.name,
     sku: row.sku,
     category: row.category,
+    kitchenZone: row.kitchenZone,
     unit: row.unit,
     stockQuantity: row.stockQuantity,
     priceCents: row.priceCents,

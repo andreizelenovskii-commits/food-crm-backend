@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import {
   addOrder,
+  chooseOrderPackaging,
   fetchOrderById,
   fetchOrderCreateOptions,
   fetchOrders,
   fetchOrdersByClientId,
+  fetchPackagingOptions,
   updateOrderStatusById,
 } from "@backend/modules/orders/orders.service";
 import {
@@ -64,6 +66,10 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
 
   app.get("/api/v1/orders/options", { preHandler: requirePermission("view_orders") }, async () => ({
     data: await fetchOrderCreateOptions(),
+  }));
+
+  app.get("/api/v1/orders/packaging-options", { preHandler: requirePermission("view_orders") }, async () => ({
+    data: await fetchPackagingOptions(),
   }));
 
   app.get("/api/v1/orders/client/:clientId", { preHandler: requirePermission("view_orders") }, async (request) => ({
@@ -147,6 +153,43 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
       entityType: "order",
       entityId: orderId,
       before: order,
+      after: updatedOrder,
+    });
+
+    return { data: updatedOrder };
+  });
+
+  app.post("/api/v1/orders/:orderId/packaging", { preHandler: authenticateRequest }, async (request) => {
+    const user = request.authUser;
+    const body = getRequestBody(request);
+    const orderId = getNumericParam(request, "orderId");
+    const orderItemId = Number(body?.orderItemId);
+    const unitIndex = Number(body?.unitIndex);
+    const packageProductId = Number(body?.packageProductId);
+
+    if (!user) {
+      throw new ValidationError("Пользователь не найден");
+    }
+
+    if (!canAdvanceOrder("SENT_TO_KITCHEN", user.role)) {
+      throw new ValidationError("У вашей роли нет права выбирать упаковку");
+    }
+
+    const before = await fetchOrderById(orderId);
+    const updatedOrder = await chooseOrderPackaging({
+      orderId,
+      orderItemId,
+      unitIndex,
+      packageProductId,
+      actorUserId: user.id,
+    });
+
+    await writeAuditLog({
+      request,
+      action: "order.packaging.choose",
+      entityType: "order",
+      entityId: orderId,
+      before,
       after: updatedOrder,
     });
 

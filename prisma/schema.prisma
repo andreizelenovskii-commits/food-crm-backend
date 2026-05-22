@@ -103,6 +103,7 @@ model Product {
   name        String
   sku         String?  @unique
   category    String?
+  kitchenZone String?
   unit        String
   stockQuantity Float  @default(0)
   priceCents  Int
@@ -114,6 +115,7 @@ model Product {
   incomingItems IncomingActItem[]
   writeoffItems WriteoffActItem[]
   orderInventoryMovements OrderInventoryMovement[]
+  packagingUsages OrderPackagingUsage[]
 }
 
 model Employee {
@@ -172,6 +174,7 @@ model Order {
   createdAt   DateTime    @default(now())
   items       OrderItem[]
   inventoryMovements OrderInventoryMovement[]
+  packagingUsages OrderPackagingUsage[]
 }
 
 model OrderInventoryMovement {
@@ -209,6 +212,7 @@ model OrderItem {
   unitPriceCents  Int
   totalPriceCents Int
   choices         OrderItemChoice[]
+  packagingUsages OrderPackagingUsage[]
 }
 
 model OrderItemChoice {
@@ -224,6 +228,27 @@ model OrderItemChoice {
   @@unique([orderItemId, choiceSlotId])
   @@index([choiceSlotId])
   @@index([selectedTechnologicalCardId])
+}
+
+model OrderPackagingUsage {
+  id                  Int      @id @default(autoincrement())
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId             Int
+  orderItem           OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItemId         Int
+  unitIndex           Int
+  packageProduct      Product  @relation(fields: [packageProductId], references: [id])
+  packageProductId    Int
+  packageProductName  String
+  kitchenZone         String
+  actorUserId         Int?
+  stockQuantityBefore Float
+  stockQuantityAfter  Float
+  createdAt           DateTime @default(now())
+
+  @@unique([orderItemId, unitIndex])
+  @@index([orderId, createdAt])
+  @@index([packageProductId, createdAt])
 }
 
 model TechnologicalCard {
