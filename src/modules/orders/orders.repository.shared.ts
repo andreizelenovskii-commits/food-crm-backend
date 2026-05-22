@@ -36,15 +36,27 @@ export type CatalogOrderItemRow = {
   rollSize: string | null;
 };
 
+export type CatalogVariantOrderRow = {
+  id: number;
+  catalogItemId: number;
+  technologicalCardId: number;
+  label: string;
+  priceCents: number;
+  pizzaSize: string | null;
+  rollSize: string | null;
+};
+
 export type OrderItemRow = {
   id: number;
   orderId: number;
   catalogItemId: number | null;
+  catalogItemVariantId: number | null;
   itemName: string;
   quantity: number;
   unitPriceCents: number;
   totalPriceCents: number;
   catalogCategory: string | null;
+  kitchenZone: string | null;
 };
 
 export type OrderPackagingUsageRow = {
@@ -133,6 +145,12 @@ export function normalizeKitchenZone(value: string): KitchenZone {
   return value === "pizza" || value === "rolls" || value === "fastfood" ? value : "fastfood";
 }
 
+function resolveOrderKitchenZone(value: string | null, category: string | null) {
+  return value === "pizza" || value === "rolls" || value === "fastfood"
+    ? value
+    : resolveKitchenZone(category);
+}
+
 export function mapOrderItem(
   row: OrderItemRow,
   packagingUsages: OrderPackagingUsage[],
@@ -140,12 +158,13 @@ export function mapOrderItem(
   return {
     id: row.id,
     catalogItemId: row.catalogItemId,
+    catalogItemVariantId: row.catalogItemVariantId,
     itemName: row.itemName,
     quantity: row.quantity,
     unitPriceCents: row.unitPriceCents,
     totalPriceCents: row.totalPriceCents,
     catalogCategory: row.catalogCategory,
-    kitchenZone: resolveKitchenZone(row.catalogCategory),
+    kitchenZone: resolveOrderKitchenZone(row.kitchenZone, row.catalogCategory),
     packagingUsages,
   };
 }

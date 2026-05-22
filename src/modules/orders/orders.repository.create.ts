@@ -13,6 +13,7 @@ import {
   DELIVERY_ITEM_NAME,
   mapRowToOrder,
   type CatalogOrderItemRow,
+  type CatalogVariantOrderRow,
   type OrderRow,
 } from "@backend/modules/orders/orders.repository.shared";
 
@@ -62,6 +63,9 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
         ),
       ]),
     ];
+    const catalogVariantIds = input.items
+      .map((item) => item.catalogItemVariantId)
+      .filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0);
     const catalogItemsResult = await client.query<CatalogOrderItemRow>(
       `
         SELECT
@@ -78,12 +82,31 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       `,
       [catalogItemIds],
     );
+    const catalogVariantsResult = catalogVariantIds.length
+      ? await client.query<CatalogVariantOrderRow>(
+          `
+            SELECT
+              v."id",
+              v."catalogItemId",
+              v."technologicalCardId",
+              v."label",
+              v."priceCents",
+              t."pizzaSize",
+              t."rollSize"
+            FROM "CatalogItemVariant" v
+            INNER JOIN "TechnologicalCard" t ON t."id" = v."technologicalCardId"
+            WHERE v."id" = ANY($1::int[])
+          `,
+          [catalogVariantIds],
+        )
+      : { rows: [] as CatalogVariantOrderRow[], rowCount: 0 };
 
     if (catalogItemsResult.rowCount !== catalogItemIds.length) {
       throw new ValidationError("Часть позиций заказа не найдена в каталоге");
     }
 
     const catalogItemsById = new Map(catalogItemsResult.rows.map((item) => [item.id, item]));
+    const catalogVariantsById = new Map(catalogVariantsResult.rows.map((variant) => [variant.id, variant]));
     const expectedIsPublished = !input.isInternal;
     const orderChoicesByCatalogItemId = new Map<number, Array<{
       choiceSlotId: number;
@@ -191,6 +214,9 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
 
     const orderItems = input.items.map((item) => {
       const catalogItem = catalogItemsById.get(item.catalogItemId);
+      const catalogVariant = item.catalogItemVariantId
+        ? catalogVariantsById.get(item.catalogItemVariantId)
+        : null;
 
       if (!catalogItem) {
         throw new ValidationError("Часть позиций заказа не найдена в каталоге");
@@ -204,15 +230,27 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
         );
       }
 
+      if (item.catalogItemVariantId && (!catalogVariant || catalogVariant.catalogItemId !== catalogItem.id)) {
+        throw new ValidationError(`Выбранный вариант позиции "${catalogItem.name}" недоступен`);
+      }
+
+      const activeVariant = catalogVariant ?? {
+        id: null,
+        label: catalogItem.pizzaSize ?? catalogItem.rollSize ?? "",
+        priceCents: catalogItem.priceCents,
+      };
+      const variantLabel = activeVariant.label ? ` ${activeVariant.label}` : "";
+
       return {
         catalogItemId: catalogItem.id,
+        catalogItemVariantId: activeVariant.id,
         itemName: [
-          catalogItem.name,
+          `${catalogItem.name}${variantLabel}`,
           ...(choiceLabelsByCatalogItemId.get(catalogItem.id) ?? []),
         ].join(" · "),
         quantity: item.quantity,
-        unitPriceCents: catalogItem.priceCents,
-        totalPriceCents: catalogItem.priceCents * item.quantity,
+        unitPriceCents: activeVariant.priceCents,
+        totalPriceCents: activeVariant.priceCents * item.quantity,
       };
     });
 
@@ -293,17 +331,19 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           INSERT INTO "OrderItem" (
             "orderId",
             "catalogItemId",
+            "catalogItemVariantId",
             "itemName",
             "quantity",
             "unitPriceCents",
             "totalPriceCents"
           )
-          VALUES ($1, $2, $3, $4, $5, $6)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
           RETURNING "id"
         `,
         [
           order.id,
           item.catalogItemId,
+          item.catalogItemVariantId,
           item.itemName,
           item.quantity,
           item.unitPriceCents,

@@ -17,10 +17,12 @@ const CATALOG_FIELDS = [
   "name",
   "priceListType",
   "category",
+  "kitchenZone",
   "description",
   "imageUrl",
   "price",
   "technologicalCardId",
+  "variants",
 ];
 
 export async function registerCatalogRoutes(app: FastifyInstance) {

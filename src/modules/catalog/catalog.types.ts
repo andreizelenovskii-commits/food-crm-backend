@@ -28,6 +28,7 @@ export type CatalogItem = {
   name: string;
   priceListType: CatalogPriceListType;
   category: string | null;
+  kitchenZone: "pizza" | "rolls" | "fastfood" | null;
   pizzaSize: string | null;
   rollSize: string | null;
   description: string | null;
@@ -36,7 +37,20 @@ export type CatalogItem = {
   createdAt: string;
   technologicalCardId: number;
   technologicalCardName: string;
+  variants: CatalogItemVariant[];
   choiceSlots: CatalogChoiceSlot[];
+};
+
+export type CatalogItemVariant = {
+  id: number;
+  label: string;
+  priceCents: number;
+  isDefault: boolean;
+  displayOrder: number;
+  technologicalCardId: number;
+  technologicalCardName: string;
+  pizzaSize: string | null;
+  rollSize: string | null;
 };
 
 export type CatalogChoiceOption = {

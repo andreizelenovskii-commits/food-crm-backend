@@ -23,6 +23,15 @@ function normalizeText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function normalizeOptionalInteger(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : undefined;
+}
+
 export function parsePublicOrderInput(body: unknown): PublicOrderInput {
   const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const deliveryAddress = normalizeText(payload.deliveryAddress);
@@ -37,6 +46,7 @@ export function parsePublicOrderInput(body: unknown): PublicOrderInput {
     .map((item) => item && typeof item === "object" ? item as Record<string, unknown> : {})
     .map((item) => ({
       catalogItemId: Number(item.catalogItemId),
+      catalogItemVariantId: normalizeOptionalInteger(item.catalogItemVariantId),
       quantity: Number(item.quantity),
       choices: Array.isArray(item.choices)
         ? item.choices

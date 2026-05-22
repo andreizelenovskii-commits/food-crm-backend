@@ -410,11 +410,13 @@ async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListIt
         oi."id",
         oi."orderId",
         oi."catalogItemId",
+        oi."catalogItemVariantId",
         oi."itemName",
         oi."quantity",
         oi."unitPriceCents",
         oi."totalPriceCents",
-        ci."category" AS "catalogCategory"
+        ci."category" AS "catalogCategory",
+        ci."kitchenZone"
       FROM "OrderItem" oi
       LEFT JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
       WHERE oi."orderId" = ANY($1::int[])

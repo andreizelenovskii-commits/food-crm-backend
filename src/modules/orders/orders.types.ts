@@ -17,6 +17,7 @@ export type OrderSource = "SITE" | "PHONE" | "ADMIN";
 
 export type OrderDraftItem = {
   catalogItemId: number;
+  catalogItemVariantId?: number;
   quantity: number;
   choices?: OrderDraftItemChoice[];
 };
@@ -41,6 +42,7 @@ export type OrderPackagingUsage = {
 export type OrderItemSummary = {
   id: number;
   catalogItemId: number | null;
+  catalogItemVariantId: number | null;
   itemName: string;
   quantity: number;
   unitPriceCents: number;

@@ -71,6 +71,7 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
   try {
     const parsed = JSON.parse(itemsRaw) as Array<{
       catalogItemId: number;
+      catalogItemVariantId?: number;
       quantity: number;
       choices?: Array<{ choiceSlotId: number; selectedCatalogItemId: number }>;
     }>;
@@ -78,6 +79,7 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
       .filter((item) => Number.isInteger(item.catalogItemId) && Number.isInteger(item.quantity))
       .map((item) => ({
         catalogItemId: item.catalogItemId,
+        catalogItemVariantId: Number.isInteger(item.catalogItemVariantId) ? item.catalogItemVariantId : undefined,
         quantity: item.quantity,
         choices: Array.isArray(item.choices)
           ? item.choices

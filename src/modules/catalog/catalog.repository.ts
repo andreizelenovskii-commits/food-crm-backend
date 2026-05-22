@@ -1,12 +1,16 @@
+import type { PoolClient } from "pg";
 import { pool } from "@backend/shared/db/pool";
 import { ensureRecentDatabaseBackup } from "@backend/shared/db/backup";
+import { withTransaction } from "@backend/shared/db/transaction";
 import type { CatalogItemInput } from "@backend/modules/catalog/catalog.validation";
 import type { CatalogChoiceSlot, CatalogItem } from "@backend/modules/catalog/catalog.types";
 import {
   buildCatalogSlug,
   ensureCatalogPriceListSlot,
   ensureCatalogTechCardExists,
+  mapRowToCatalogVariant,
   mapRowToCatalogItem,
+  type CatalogVariantRow,
   type CatalogRow,
 } from "@backend/modules/catalog/catalog.repository.shared";
 
@@ -103,14 +107,50 @@ async function hydrateCatalogChoiceSlots(rows: CatalogRow[], publishedOnly: bool
   }, new Map<number, CatalogChoiceSlot[]>());
 }
 
-export async function getCatalogItems(): Promise<CatalogItem[]> {
-  const result = await pool.query<CatalogRow>(
+async function hydrateCatalogVariants(rows: CatalogRow[]) {
+  const catalogItemIds = rows.map((row) => row.id);
+
+  if (!catalogItemIds.length) {
+    return new Map<number, ReturnType<typeof mapRowToCatalogVariant>[]>();
+  }
+
+  const result = await pool.query<CatalogVariantRow>(
     `
+      SELECT
+        v."id",
+        v."catalogItemId",
+        v."label",
+        v."priceCents",
+        v."isDefault",
+        v."displayOrder",
+        v."technologicalCardId",
+        t."name" AS "technologicalCardName",
+        t."pizzaSize",
+        t."rollSize"
+      FROM "CatalogItemVariant" v
+      INNER JOIN "TechnologicalCard" t ON t."id" = v."technologicalCardId"
+      WHERE v."catalogItemId" = ANY($1::int[])
+      ORDER BY v."displayOrder" ASC, v."id" ASC
+    `,
+    [catalogItemIds],
+  );
+
+  return result.rows.reduce<Map<number, ReturnType<typeof mapRowToCatalogVariant>[]>>((acc, row) => {
+    const current = acc.get(row.catalogItemId) ?? [];
+    current.push(mapRowToCatalogVariant(row));
+    acc.set(row.catalogItemId, current);
+    return acc;
+  }, new Map());
+}
+
+function selectCatalogSql(where = "") {
+  return `
       SELECT
         c."id",
         c."name",
         c."slug",
         c."category",
+        c."kitchenZone",
         t."pizzaSize",
         t."rollSize",
         c."description",
@@ -122,63 +162,52 @@ export async function getCatalogItems(): Promise<CatalogItem[]> {
         t."name" AS "technologicalCardName"
       FROM "CatalogItem" c
       INNER JOIN "TechnologicalCard" t ON t."id" = c."technologicalCardId"
+      ${where}
+    `;
+}
+
+async function mapCatalogRows(rows: CatalogRow[], publishedOnly: boolean) {
+  const [choiceSlotsByCard, variantsByItem] = await Promise.all([
+    hydrateCatalogChoiceSlots(rows, publishedOnly),
+    hydrateCatalogVariants(rows),
+  ]);
+
+  return rows.map((row) =>
+    mapRowToCatalogItem(
+      row,
+      choiceSlotsByCard.get(row.technologicalCardId) ?? [],
+      variantsByItem.get(row.id) ?? [],
+    ),
+  );
+}
+
+export async function getCatalogItems(): Promise<CatalogItem[]> {
+  const result = await pool.query<CatalogRow>(
+    `
+      ${selectCatalogSql()}
       ORDER BY c."category" ASC NULLS LAST, c."createdAt" DESC
     `,
   );
 
-  const choiceSlotsByCard = await hydrateCatalogChoiceSlots(result.rows, false);
-
-  return result.rows.map((row) => mapRowToCatalogItem(row, choiceSlotsByCard.get(row.technologicalCardId) ?? []));
+  return mapCatalogRows(result.rows, false);
 }
 
 export async function getPublicCatalogItems(): Promise<CatalogItem[]> {
   const result = await pool.query<CatalogRow>(
     `
-      SELECT
-        c."id",
-        c."name",
-        c."slug",
-        c."category",
-        t."pizzaSize",
-        t."rollSize",
-        c."description",
-        c."imageUrl",
-        c."priceCents",
-        c."isPublished",
-        c."createdAt",
-        c."technologicalCardId",
-        t."name" AS "technologicalCardName"
-      FROM "CatalogItem" c
-      INNER JOIN "TechnologicalCard" t ON t."id" = c."technologicalCardId"
+      ${selectCatalogSql()}
       WHERE c."isPublished" = TRUE
       ORDER BY c."category" ASC NULLS LAST, c."createdAt" DESC
     `,
   );
 
-  const choiceSlotsByCard = await hydrateCatalogChoiceSlots(result.rows, true);
-
-  return result.rows.map((row) => mapRowToCatalogItem(row, choiceSlotsByCard.get(row.technologicalCardId) ?? []));
+  return mapCatalogRows(result.rows, true);
 }
 
 export async function getCatalogItemById(id: number): Promise<CatalogItem | null> {
   const result = await pool.query<CatalogRow>(
     `
-      SELECT
-        c."id",
-        c."name",
-        c."slug",
-        c."category",
-        t."pizzaSize",
-        t."rollSize",
-        c."description",
-        c."imageUrl",
-        c."priceCents",
-        c."isPublished",
-        c."createdAt",
-        c."technologicalCardId",
-        t."name" AS "technologicalCardName"
-      FROM "CatalogItem" c
-      INNER JOIN "TechnologicalCard" t ON t."id" = c."technologicalCardId"
+      ${selectCatalogSql()}
       WHERE c."id" = $1
       LIMIT 1
     `,
@@ -189,9 +218,7 @@ export async function getCatalogItemById(id: number): Promise<CatalogItem | null
     return null;
   }
 
-  const choiceSlotsByCard = await hydrateCatalogChoiceSlots(result.rows, result.rows[0].isPublished);
-
-  return mapRowToCatalogItem(result.rows[0], choiceSlotsByCard.get(result.rows[0].technologicalCardId) ?? []);
+  return (await mapCatalogRows(result.rows, result.rows[0].isPublished))[0] ?? null;
 }
 
 export async function createCatalogItem(input: CatalogItemInput): Promise<CatalogItem> {
@@ -200,47 +227,48 @@ export async function createCatalogItem(input: CatalogItemInput): Promise<Catalo
   const slug = buildCatalogSlug(input);
 
   await ensureRecentDatabaseBackup("catalog-item-create");
-  const result = await pool.query<CatalogRow>(
-    `
-      INSERT INTO "CatalogItem" (
-        "name",
-        "slug",
-        "category",
-        "description",
-        "imageUrl",
-        "priceCents",
-        "isPublished",
-        "technologicalCardId"
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING
-        "id",
-        "name",
-        "slug",
-        "category",
-        (SELECT "pizzaSize" FROM "TechnologicalCard" WHERE "id" = $8) AS "pizzaSize",
-        (SELECT "rollSize" FROM "TechnologicalCard" WHERE "id" = $8) AS "rollSize",
-        "description",
-        "imageUrl",
-        "priceCents",
-        "isPublished",
-        "createdAt",
-        "technologicalCardId",
-        (SELECT "name" FROM "TechnologicalCard" WHERE "id" = $8) AS "technologicalCardName"
-    `,
-    [
-      input.name,
-      slug,
-      input.category,
-      input.description,
-      input.imageUrl,
-      input.priceCents,
-      input.priceListType === "CLIENT",
-      input.technologicalCardId,
-    ],
-  );
+  const catalogItemId = await withTransaction(async (client) => {
+    const result = await client.query<{ id: number }>(
+      `
+        INSERT INTO "CatalogItem" (
+          "name",
+          "slug",
+          "category",
+          "kitchenZone",
+          "description",
+          "imageUrl",
+          "priceCents",
+          "isPublished",
+          "technologicalCardId"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING "id"
+      `,
+      [
+        input.name,
+        slug,
+        input.category,
+        input.kitchenZone,
+        input.description,
+        input.imageUrl,
+        input.priceCents,
+        input.priceListType === "CLIENT",
+        input.technologicalCardId,
+      ],
+    );
 
-  return mapRowToCatalogItem(result.rows[0]);
+    await replaceCatalogVariants(client, result.rows[0].id, input);
+
+    return result.rows[0].id;
+  });
+
+  const item = await getCatalogItemById(catalogItemId);
+
+  if (!item) {
+    throw new Error("Catalog item was not found after create");
+  }
+
+  return item;
 }
 
 export async function updateCatalogItem(
@@ -252,52 +280,83 @@ export async function updateCatalogItem(
   const slug = buildCatalogSlug(input);
 
   await ensureRecentDatabaseBackup("catalog-item-update");
-  const result = await pool.query<CatalogRow>(
-    `
-      UPDATE "CatalogItem"
-      SET
-        "name" = $2,
-        "slug" = $3,
-        "category" = $4,
-        "description" = $5,
-        "imageUrl" = $6,
-        "priceCents" = $7,
-        "isPublished" = $8,
-        "technologicalCardId" = $9
-      WHERE "id" = $1
-      RETURNING
-        "id",
-        "name",
-        "slug",
-        "category",
-        (SELECT "pizzaSize" FROM "TechnologicalCard" WHERE "id" = $9) AS "pizzaSize",
-        (SELECT "rollSize" FROM "TechnologicalCard" WHERE "id" = $9) AS "rollSize",
-        "description",
-        "imageUrl",
-        "priceCents",
-        "isPublished",
-        "createdAt",
-        "technologicalCardId",
-        (SELECT "name" FROM "TechnologicalCard" WHERE "id" = $9) AS "technologicalCardName"
-    `,
-    [
-      id,
-      input.name,
-      slug,
-      input.category,
-      input.description,
-      input.imageUrl,
-      input.priceCents,
-      input.priceListType === "CLIENT",
-      input.technologicalCardId,
-    ],
-  );
+  const updatedId = await withTransaction(async (client) => {
+    const result = await client.query<{ id: number }>(
+      `
+        UPDATE "CatalogItem"
+        SET
+          "name" = $2,
+          "slug" = $3,
+          "category" = $4,
+          "kitchenZone" = $5,
+          "description" = $6,
+          "imageUrl" = $7,
+          "priceCents" = $8,
+          "isPublished" = $9,
+          "technologicalCardId" = $10
+        WHERE "id" = $1
+        RETURNING "id"
+      `,
+      [
+        id,
+        input.name,
+        slug,
+        input.category,
+        input.kitchenZone,
+        input.description,
+        input.imageUrl,
+        input.priceCents,
+        input.priceListType === "CLIENT",
+        input.technologicalCardId,
+      ],
+    );
 
-  if (!result.rowCount) {
+    if (!result.rowCount) {
+      return null;
+    }
+
+    await replaceCatalogVariants(client, id, input);
+
+    return id;
+  });
+
+  if (!updatedId) {
     return null;
   }
 
-  return mapRowToCatalogItem(result.rows[0]);
+  return getCatalogItemById(updatedId);
+}
+
+async function replaceCatalogVariants(
+  client: PoolClient,
+  catalogItemId: number,
+  input: CatalogItemInput,
+) {
+  await client.query(`DELETE FROM "CatalogItemVariant" WHERE "catalogItemId" = $1`, [catalogItemId]);
+
+  for (const variant of input.variants) {
+    await client.query(
+      `
+        INSERT INTO "CatalogItemVariant" (
+          "catalogItemId",
+          "technologicalCardId",
+          "label",
+          "priceCents",
+          "isDefault",
+          "displayOrder"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        catalogItemId,
+        variant.technologicalCardId,
+        variant.label,
+        variant.priceCents,
+        variant.isDefault,
+        variant.displayOrder,
+      ],
+    );
+  }
 }
 
 export async function deleteCatalogItem(id: number): Promise<boolean> {

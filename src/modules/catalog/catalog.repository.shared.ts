@@ -3,6 +3,7 @@ import { ValidationError } from "@backend/shared/errors/app-error";
 import type {
   CatalogChoiceSlot,
   CatalogItem,
+  CatalogItemVariant,
   CatalogPriceListType,
 } from "@backend/modules/catalog/catalog.types";
 import type { CatalogItemInput } from "@backend/modules/catalog/catalog.validation";
@@ -12,6 +13,7 @@ export type CatalogRow = {
   name: string;
   slug: string;
   category: string | null;
+  kitchenZone: "pizza" | "rolls" | "fastfood" | null;
   pizzaSize: string | null;
   rollSize: string | null;
   description: string | null;
@@ -21,6 +23,19 @@ export type CatalogRow = {
   createdAt: Date;
   technologicalCardId: number;
   technologicalCardName: string;
+};
+
+export type CatalogVariantRow = {
+  id: number;
+  catalogItemId: number;
+  label: string;
+  priceCents: number;
+  isDefault: boolean;
+  displayOrder: number;
+  technologicalCardId: number;
+  technologicalCardName: string;
+  pizzaSize: string | null;
+  rollSize: string | null;
 };
 
 function slugifyCatalogItemName(value: string) {
@@ -58,19 +73,24 @@ function normalizeCatalogImageUrl(imageUrl: string | null) {
 }
 
 export function buildCatalogSlug(
-  input: Pick<CatalogItemInput, "name" | "priceListType" | "technologicalCardId">,
+  input: Pick<CatalogItemInput, "name" | "priceListType">,
 ) {
   const baseSlug = slugifyCatalogItemName(input.name) || "catalog-item";
 
-  return `${baseSlug}-${input.priceListType.toLowerCase()}-${input.technologicalCardId}`;
+  return `${baseSlug}-${input.priceListType.toLowerCase()}`;
 }
 
-export function mapRowToCatalogItem(row: CatalogRow, choiceSlots: CatalogChoiceSlot[] = []): CatalogItem {
+export function mapRowToCatalogItem(
+  row: CatalogRow,
+  choiceSlots: CatalogChoiceSlot[] = [],
+  variants: CatalogItemVariant[] = [],
+): CatalogItem {
   return {
     id: row.id,
     name: row.name,
     priceListType: mapPriceListType(row.isPublished),
     category: row.category,
+    kitchenZone: row.kitchenZone,
     pizzaSize: row.pizzaSize,
     rollSize: row.rollSize,
     description: row.description,
@@ -79,24 +99,38 @@ export function mapRowToCatalogItem(row: CatalogRow, choiceSlots: CatalogChoiceS
     createdAt: row.createdAt.toISOString(),
     technologicalCardId: row.technologicalCardId,
     technologicalCardName: row.technologicalCardName,
+    variants,
     choiceSlots,
   };
 }
 
+export function mapRowToCatalogVariant(row: CatalogVariantRow): CatalogItemVariant {
+  return {
+    id: row.id,
+    label: row.label,
+    priceCents: row.priceCents,
+    isDefault: row.isDefault,
+    displayOrder: row.displayOrder,
+    technologicalCardId: row.technologicalCardId,
+    technologicalCardName: row.technologicalCardName,
+    pizzaSize: row.pizzaSize,
+    rollSize: row.rollSize,
+  };
+}
+
 export async function ensureCatalogTechCardExists(input: CatalogItemInput) {
+  const techCardIds = input.variants.map((variant) => variant.technologicalCardId);
   const result = await pool.query<{ id: number; category: string; pizzaSize: string | null; rollSize: string | null }>(
     `
       SELECT "id", "category", "pizzaSize", "rollSize"
       FROM "TechnologicalCard"
-      WHERE "id" = $1
-      LIMIT 1
+      WHERE "id" = ANY($1::int[])
     `,
-    [input.technologicalCardId],
+    [techCardIds],
   );
-  const techCard = result.rows[0];
 
-  if (!techCard) {
-    throw new ValidationError("Выбранная технологическая карта не найдена");
+  if (result.rows.length !== techCardIds.length) {
+    throw new ValidationError("Одна из выбранных технологических карт не найдена");
   }
 }
 
@@ -105,15 +139,15 @@ export async function ensureCatalogPriceListSlot(input: CatalogItemInput, exclud
     `
       SELECT "id"
       FROM "CatalogItem"
-      WHERE "technologicalCardId" = $1
+      WHERE "slug" = $1
         AND "isPublished" = $2
         AND ($3::int IS NULL OR "id" <> $3)
       LIMIT 1
     `,
-    [input.technologicalCardId, input.priceListType === "CLIENT", excludeId ?? null],
+    [buildCatalogSlug(input), input.priceListType === "CLIENT", excludeId ?? null],
   );
 
   if (result.rowCount) {
-    throw new ValidationError("Эта технологическая карта уже добавлена в выбранный прайс");
+    throw new ValidationError("Карточка с таким названием уже есть в выбранном прайсе");
   }
 }

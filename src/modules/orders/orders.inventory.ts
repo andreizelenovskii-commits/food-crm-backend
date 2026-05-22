@@ -100,20 +100,20 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
       SELECT oi."itemName",
         CASE
           WHEN ci."id" IS NULL THEN 'catalog'
-          WHEN tc."outputQuantity" <= 0 THEN 'output'
+          WHEN COALESCE(vtc."outputQuantity", tc."outputQuantity") <= 0 THEN 'output'
           WHEN NOT EXISTS (
             SELECT 1 FROM "TechCardIngredient" tci
-            WHERE tci."technologicalCardId" = ci."technologicalCardId"
+            WHERE tci."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
           ) AND NOT EXISTS (
             SELECT 1 FROM "TechCardComponent" tcc
-            WHERE tcc."technologicalCardId" = ci."technologicalCardId"
+            WHERE tcc."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
           ) AND NOT EXISTS (
             SELECT 1 FROM "TechCardChoiceSlot" tcs
-            WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+            WHERE tcs."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
           ) THEN 'ingredients'
           WHEN EXISTS (
             SELECT 1 FROM "TechCardChoiceSlot" tcs
-            WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+            WHERE tcs."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
               AND NOT EXISTS (
                 SELECT 1 FROM "OrderItemChoice" oic
                 WHERE oic."orderItemId" = oi."id"
@@ -124,26 +124,28 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
         END AS "issue"
       FROM "OrderItem" oi
       LEFT JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
+      LEFT JOIN "CatalogItemVariant" v ON v."id" = oi."catalogItemVariantId"
       LEFT JOIN "TechnologicalCard" tc ON tc."id" = ci."technologicalCardId"
+      LEFT JOIN "TechnologicalCard" vtc ON vtc."id" = v."technologicalCardId"
       WHERE oi."orderId" = $1
         AND oi."catalogItemId" IS NOT NULL
         AND (
-          ci."id" IS NULL OR tc."outputQuantity" <= 0 OR (
+          ci."id" IS NULL OR COALESCE(vtc."outputQuantity", tc."outputQuantity") <= 0 OR (
             NOT EXISTS (
             SELECT 1 FROM "TechCardIngredient" tci
-            WHERE tci."technologicalCardId" = ci."technologicalCardId"
+            WHERE tci."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
             )
             AND NOT EXISTS (
               SELECT 1 FROM "TechCardComponent" tcc
-              WHERE tcc."technologicalCardId" = ci."technologicalCardId"
+              WHERE tcc."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
             )
             AND NOT EXISTS (
               SELECT 1 FROM "TechCardChoiceSlot" tcs
-              WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+              WHERE tcs."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
             )
           ) OR EXISTS (
             SELECT 1 FROM "TechCardChoiceSlot" tcs
-            WHERE tcs."technologicalCardId" = ci."technologicalCardId"
+            WHERE tcs."technologicalCardId" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
               AND NOT EXISTS (
                 SELECT 1 FROM "OrderItemChoice" oic
                 WHERE oic."orderItemId" = oi."id"
@@ -170,7 +172,8 @@ async function getIngredientRequirements(client: PoolClient, orderId: number) {
           (oi."quantity"::numeric / NULLIF(tc."outputQuantity", 0)) AS "multiplier"
         FROM "OrderItem" oi
         INNER JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
-        INNER JOIN "TechnologicalCard" tc ON tc."id" = ci."technologicalCardId"
+        LEFT JOIN "CatalogItemVariant" v ON v."id" = oi."catalogItemVariantId"
+        INNER JOIN "TechnologicalCard" tc ON tc."id" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
         WHERE oi."orderId" = $1
 
         UNION ALL
