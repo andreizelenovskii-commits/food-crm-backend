@@ -2,6 +2,7 @@ import { pool } from "@backend/shared/db/pool";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import type {
   CatalogChoiceSlot,
+  CatalogItemExcludedIngredient,
   CatalogItem,
   CatalogItemVariant,
   CatalogPriceListType,
@@ -36,6 +37,15 @@ export type CatalogVariantRow = {
   technologicalCardName: string;
   pizzaSize: string | null;
   rollSize: string | null;
+};
+
+export type CatalogExcludedIngredientRow = {
+  id: number;
+  catalogItemId: number;
+  productId: number;
+  productName: string;
+  label: string;
+  displayOrder: number;
 };
 
 function slugifyCatalogItemName(value: string) {
@@ -84,6 +94,7 @@ export function mapRowToCatalogItem(
   row: CatalogRow,
   choiceSlots: CatalogChoiceSlot[] = [],
   variants: CatalogItemVariant[] = [],
+  excludedIngredients: CatalogItemExcludedIngredient[] = [],
 ): CatalogItem {
   return {
     id: row.id,
@@ -100,7 +111,18 @@ export function mapRowToCatalogItem(
     technologicalCardId: row.technologicalCardId,
     technologicalCardName: row.technologicalCardName,
     variants,
+    excludedIngredients,
     choiceSlots,
+  };
+}
+
+export function mapRowToCatalogExcludedIngredient(row: CatalogExcludedIngredientRow): CatalogItemExcludedIngredient {
+  return {
+    id: row.id,
+    productId: row.productId,
+    productName: row.productName,
+    label: row.label,
+    displayOrder: row.displayOrder,
   };
 }
 
@@ -131,6 +153,27 @@ export async function ensureCatalogTechCardExists(input: CatalogItemInput) {
 
   if (result.rows.length !== techCardIds.length) {
     throw new ValidationError("Одна из выбранных технологических карт не найдена");
+  }
+}
+
+export async function ensureCatalogExcludedIngredientProductsExist(input: CatalogItemInput) {
+  const productIds = input.excludedIngredients.map((ingredient) => ingredient.productId);
+
+  if (!productIds.length) {
+    return;
+  }
+
+  const result = await pool.query<{ id: number }>(
+    `
+      SELECT "id"
+      FROM "Product"
+      WHERE "id" = ANY($1::int[])
+    `,
+    [productIds],
+  );
+
+  if (result.rows.length !== productIds.length) {
+    throw new ValidationError("Один из исключаемых ингредиентов не найден на складе");
   }
 }
 

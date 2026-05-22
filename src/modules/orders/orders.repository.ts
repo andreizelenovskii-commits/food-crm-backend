@@ -9,10 +9,12 @@ import { consumeOrderStockForStatus } from "@backend/modules/orders/orders.inven
 import { ValidationError } from "@backend/shared/errors/app-error";
 import {
   DELIVERY_ITEM_NAME,
+  mapExcludedIngredient,
   mapOrderItem,
   mapPackagingUsage,
   mapRowToOrder,
   type OrderItemRow,
+  type OrderItemExcludedIngredientRow,
   type OrderPackagingUsageRow,
   type OrderRow,
   resolveKitchenZone,
@@ -426,6 +428,21 @@ async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListIt
     [orderIds, DELIVERY_ITEM_NAME],
   );
   const itemIds = itemsResult.rows.map((item) => item.id);
+  const exclusionsResult = itemIds.length
+    ? await pool.query<OrderItemExcludedIngredientRow>(
+        `
+          SELECT
+            "id",
+            "orderItemId",
+            "productId",
+            "label"
+          FROM "OrderItemExcludedIngredient"
+          WHERE "orderItemId" = ANY($1::int[])
+          ORDER BY "id" ASC
+        `,
+        [itemIds],
+      )
+    : { rows: [] as OrderItemExcludedIngredientRow[] };
   const usagesResult = itemIds.length
     ? await pool.query<OrderPackagingUsageRow>(
         `
@@ -446,6 +463,13 @@ async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListIt
     : { rows: [] as OrderPackagingUsageRow[] };
 
   const usagesByItemId = new Map<number, ReturnType<typeof mapPackagingUsage>[]>();
+  const exclusionsByItemId = new Map<number, ReturnType<typeof mapExcludedIngredient>[]>();
+
+  for (const row of exclusionsResult.rows) {
+    const itemExclusions = exclusionsByItemId.get(row.orderItemId) ?? [];
+    itemExclusions.push(mapExcludedIngredient(row));
+    exclusionsByItemId.set(row.orderItemId, itemExclusions);
+  }
 
   for (const usage of usagesResult.rows.map(mapPackagingUsage)) {
     const itemUsages = usagesByItemId.get(usage.orderItemId) ?? [];
@@ -457,7 +481,11 @@ async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListIt
 
   for (const item of itemsResult.rows) {
     const orderItems = itemsByOrderId.get(item.orderId) ?? [];
-    orderItems.push(mapOrderItem(item, usagesByItemId.get(item.id) ?? []));
+    orderItems.push(mapOrderItem(
+      item,
+      usagesByItemId.get(item.id) ?? [],
+      exclusionsByItemId.get(item.id) ?? [],
+    ));
     itemsByOrderId.set(item.orderId, orderItems);
   }
 

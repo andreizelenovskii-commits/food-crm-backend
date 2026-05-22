@@ -23,6 +23,7 @@ const CATALOG_FIELDS = [
   "price",
   "technologicalCardId",
   "variants",
+  "excludedIngredients",
 ];
 
 export async function registerCatalogRoutes(app: FastifyInstance) {

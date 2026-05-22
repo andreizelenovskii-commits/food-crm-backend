@@ -66,6 +66,9 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
     const catalogVariantIds = input.items
       .map((item) => item.catalogItemVariantId)
       .filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0);
+    const excludedIngredientIds = [
+      ...new Set(input.items.flatMap((item) => item.excludedIngredientIds ?? [])),
+    ];
     const catalogItemsResult = await client.query<CatalogOrderItemRow>(
       `
         SELECT
@@ -100,6 +103,25 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           [catalogVariantIds],
         )
       : { rows: [] as CatalogVariantOrderRow[], rowCount: 0 };
+    const exclusionsResult = excludedIngredientIds.length
+      ? await client.query<{
+          id: number;
+          catalogItemId: number;
+          productId: number;
+          label: string;
+        }>(
+          `
+            SELECT
+              "id",
+              "catalogItemId",
+              "productId",
+              "label"
+            FROM "CatalogItemExcludedIngredient"
+            WHERE "id" = ANY($1::int[])
+          `,
+          [excludedIngredientIds],
+        )
+      : { rows: [] as Array<{ id: number; catalogItemId: number; productId: number; label: string }>, rowCount: 0 };
 
     if (catalogItemsResult.rowCount !== catalogItemIds.length) {
       throw new ValidationError("Часть позиций заказа не найдена в каталоге");
@@ -107,6 +129,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
 
     const catalogItemsById = new Map(catalogItemsResult.rows.map((item) => [item.id, item]));
     const catalogVariantsById = new Map(catalogVariantsResult.rows.map((variant) => [variant.id, variant]));
+    const exclusionsById = new Map(exclusionsResult.rows.map((exclusion) => [exclusion.id, exclusion]));
     const expectedIsPublished = !input.isInternal;
     const orderChoicesByCatalogItemId = new Map<number, Array<{
       choiceSlotId: number;
@@ -240,6 +263,16 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
         priceCents: catalogItem.priceCents,
       };
       const variantLabel = activeVariant.label ? ` ${activeVariant.label}` : "";
+      const excludedIngredients = (item.excludedIngredientIds ?? []).map((exclusionId) => {
+        const exclusion = exclusionsById.get(exclusionId);
+
+        if (!exclusion || exclusion.catalogItemId !== catalogItem.id) {
+          throw new ValidationError(`Исключаемый ингредиент для "${catalogItem.name}" недоступен`);
+        }
+
+        return exclusion;
+      });
+      const exclusionLabels = excludedIngredients.map((ingredient) => `Без ${ingredient.label}`);
 
       return {
         catalogItemId: catalogItem.id,
@@ -247,7 +280,9 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
         itemName: [
           `${catalogItem.name}${variantLabel}`,
           ...(choiceLabelsByCatalogItemId.get(catalogItem.id) ?? []),
+          ...exclusionLabels,
         ].join(" · "),
+        excludedIngredients,
         quantity: item.quantity,
         unitPriceCents: activeVariant.priceCents,
         totalPriceCents: activeVariant.priceCents * item.quantity,
@@ -367,6 +402,26 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
             choice.choiceSlotId,
             choice.selectedTechnologicalCardId,
             choice.quantity,
+          ],
+        );
+      }
+
+      for (const exclusion of item.excludedIngredients) {
+        await client.query(
+          `
+            INSERT INTO "OrderItemExcludedIngredient" (
+              "orderItemId",
+              "catalogItemExcludedIngredientId",
+              "productId",
+              "label"
+            )
+            VALUES ($1, $2, $3, $4)
+          `,
+          [
+            insertedItem.rows[0].id,
+            exclusion.id,
+            exclusion.productId,
+            exclusion.label,
           ],
         );
       }

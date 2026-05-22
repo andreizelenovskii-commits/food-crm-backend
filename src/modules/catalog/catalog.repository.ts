@@ -6,10 +6,13 @@ import type { CatalogItemInput } from "@backend/modules/catalog/catalog.validati
 import type { CatalogChoiceSlot, CatalogItem } from "@backend/modules/catalog/catalog.types";
 import {
   buildCatalogSlug,
+  ensureCatalogExcludedIngredientProductsExist,
   ensureCatalogPriceListSlot,
   ensureCatalogTechCardExists,
+  mapRowToCatalogExcludedIngredient,
   mapRowToCatalogVariant,
   mapRowToCatalogItem,
+  type CatalogExcludedIngredientRow,
   type CatalogVariantRow,
   type CatalogRow,
 } from "@backend/modules/catalog/catalog.repository.shared";
@@ -143,6 +146,38 @@ async function hydrateCatalogVariants(rows: CatalogRow[]) {
   }, new Map());
 }
 
+async function hydrateCatalogExcludedIngredients(rows: CatalogRow[]) {
+  const catalogItemIds = rows.map((row) => row.id);
+
+  if (!catalogItemIds.length) {
+    return new Map<number, ReturnType<typeof mapRowToCatalogExcludedIngredient>[]>();
+  }
+
+  const result = await pool.query<CatalogExcludedIngredientRow>(
+    `
+      SELECT
+        e."id",
+        e."catalogItemId",
+        e."productId",
+        p."name" AS "productName",
+        e."label",
+        e."displayOrder"
+      FROM "CatalogItemExcludedIngredient" e
+      INNER JOIN "Product" p ON p."id" = e."productId"
+      WHERE e."catalogItemId" = ANY($1::int[])
+      ORDER BY e."displayOrder" ASC, e."id" ASC
+    `,
+    [catalogItemIds],
+  );
+
+  return result.rows.reduce<Map<number, ReturnType<typeof mapRowToCatalogExcludedIngredient>[]>>((acc, row) => {
+    const current = acc.get(row.catalogItemId) ?? [];
+    current.push(mapRowToCatalogExcludedIngredient(row));
+    acc.set(row.catalogItemId, current);
+    return acc;
+  }, new Map());
+}
+
 function selectCatalogSql(where = "") {
   return `
       SELECT
@@ -167,9 +202,10 @@ function selectCatalogSql(where = "") {
 }
 
 async function mapCatalogRows(rows: CatalogRow[], publishedOnly: boolean) {
-  const [choiceSlotsByCard, variantsByItem] = await Promise.all([
+  const [choiceSlotsByCard, variantsByItem, excludedIngredientsByItem] = await Promise.all([
     hydrateCatalogChoiceSlots(rows, publishedOnly),
     hydrateCatalogVariants(rows),
+    hydrateCatalogExcludedIngredients(rows),
   ]);
 
   return rows.map((row) =>
@@ -177,6 +213,7 @@ async function mapCatalogRows(rows: CatalogRow[], publishedOnly: boolean) {
       row,
       choiceSlotsByCard.get(row.technologicalCardId) ?? [],
       variantsByItem.get(row.id) ?? [],
+      excludedIngredientsByItem.get(row.id) ?? [],
     ),
   );
 }
@@ -223,6 +260,7 @@ export async function getCatalogItemById(id: number): Promise<CatalogItem | null
 
 export async function createCatalogItem(input: CatalogItemInput): Promise<CatalogItem> {
   await ensureCatalogTechCardExists(input);
+  await ensureCatalogExcludedIngredientProductsExist(input);
   await ensureCatalogPriceListSlot(input);
   const slug = buildCatalogSlug(input);
 
@@ -258,6 +296,7 @@ export async function createCatalogItem(input: CatalogItemInput): Promise<Catalo
     );
 
     await replaceCatalogVariants(client, result.rows[0].id, input);
+    await replaceCatalogExcludedIngredients(client, result.rows[0].id, input);
 
     return result.rows[0].id;
   });
@@ -276,6 +315,7 @@ export async function updateCatalogItem(
   input: CatalogItemInput,
 ): Promise<CatalogItem | null> {
   await ensureCatalogTechCardExists(input);
+  await ensureCatalogExcludedIngredientProductsExist(input);
   await ensureCatalogPriceListSlot(input, id);
   const slug = buildCatalogSlug(input);
 
@@ -316,6 +356,7 @@ export async function updateCatalogItem(
     }
 
     await replaceCatalogVariants(client, id, input);
+    await replaceCatalogExcludedIngredients(client, id, input);
 
     return id;
   });
@@ -325,6 +366,34 @@ export async function updateCatalogItem(
   }
 
   return getCatalogItemById(updatedId);
+}
+
+async function replaceCatalogExcludedIngredients(
+  client: PoolClient,
+  catalogItemId: number,
+  input: CatalogItemInput,
+) {
+  await client.query(`DELETE FROM "CatalogItemExcludedIngredient" WHERE "catalogItemId" = $1`, [catalogItemId]);
+
+  for (const ingredient of input.excludedIngredients) {
+    await client.query(
+      `
+        INSERT INTO "CatalogItemExcludedIngredient" (
+          "catalogItemId",
+          "productId",
+          "label",
+          "displayOrder"
+        )
+        VALUES ($1, $2, $3, $4)
+      `,
+      [
+        catalogItemId,
+        ingredient.productId,
+        ingredient.label,
+        ingredient.displayOrder,
+      ],
+    );
+  }
 }
 
 async function replaceCatalogVariants(

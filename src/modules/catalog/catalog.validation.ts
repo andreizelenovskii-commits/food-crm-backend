@@ -21,6 +21,13 @@ export type CatalogItemInput = {
   priceCents: number;
   technologicalCardId: number;
   variants: CatalogVariantInput[];
+  excludedIngredients: CatalogExcludedIngredientInput[];
+};
+
+export type CatalogExcludedIngredientInput = {
+  productId: number;
+  label: string;
+  displayOrder: number;
 };
 
 export type CatalogVariantInput = {
@@ -54,6 +61,7 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
   const price = Number(normalizeInput(formData.get("price")));
   const technologicalCardId = Number(normalizeInput(formData.get("technologicalCardId")));
   const variants = parseCatalogVariants(formData);
+  const excludedIngredients = normalizeExcludedIngredients(parseCatalogExcludedIngredients(formData));
 
   if (!name || !priceListType || !category || !kitchenZone || !imageUrl) {
     throw new ValidationError("Заполните название, прайс, категорию, кухонную зону и фото позиции каталога");
@@ -99,7 +107,32 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
     priceCents: normalizedVariants.find((variant) => variant.isDefault)?.priceCents ?? normalizedVariants[0].priceCents,
     technologicalCardId: normalizedVariants.find((variant) => variant.isDefault)?.technologicalCardId ?? normalizedVariants[0].technologicalCardId,
     variants: normalizedVariants,
+    excludedIngredients,
   };
+}
+
+function parseCatalogExcludedIngredients(formData: FormData): CatalogExcludedIngredientInput[] {
+  const raw = normalizeInput(formData.get("excludedIngredients"));
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Array<{
+      productId: number;
+      label: string;
+      displayOrder?: number;
+    }>;
+
+    return parsed.map((ingredient, index) => ({
+      productId: Number(ingredient.productId),
+      label: String(ingredient.label ?? "").trim(),
+      displayOrder: Number.isInteger(ingredient.displayOrder) ? Number(ingredient.displayOrder) : index,
+    }));
+  } catch {
+    throw new ValidationError("Не удалось прочитать исключаемые ингредиенты");
+  }
 }
 
 function parseCatalogVariants(formData: FormData): CatalogVariantInput[] {
@@ -164,6 +197,31 @@ function normalizeVariants(variants: CatalogVariantInput[]) {
     return {
       ...variant,
       isDefault: defaultCount === 0 ? index === 0 : variant.isDefault,
+      displayOrder: index,
+    };
+  });
+}
+
+function normalizeExcludedIngredients(excludedIngredients: CatalogExcludedIngredientInput[]) {
+  const productIds = new Set<number>();
+
+  return excludedIngredients.map((ingredient, index) => {
+    if (!Number.isInteger(ingredient.productId) || ingredient.productId <= 0) {
+      throw new ValidationError("У каждого исключаемого ингредиента должен быть продукт склада");
+    }
+
+    if (productIds.has(ingredient.productId)) {
+      throw new ValidationError("Один ингредиент нельзя добавить в исключения дважды");
+    }
+
+    if (!ingredient.label) {
+      throw new ValidationError("У каждого исключаемого ингредиента должна быть подпись для сайта");
+    }
+
+    productIds.add(ingredient.productId);
+
+    return {
+      ...ingredient,
       displayOrder: index,
     };
   });

@@ -211,6 +211,12 @@ async function getIngredientRequirements(client: PoolClient, orderId: number) {
       FROM card_tree
       INNER JOIN "TechCardIngredient" tci ON tci."technologicalCardId" = card_tree."cardId"
       INNER JOIN "Product" p ON p."id" = tci."productId"
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM "OrderItemExcludedIngredient" excluded
+        WHERE excluded."orderItemId" = card_tree."orderItemId"
+          AND excluded."productId" = tci."productId"
+      )
       GROUP BY p."id", p."name", p."unit"
       ORDER BY p."name" ASC
     `,

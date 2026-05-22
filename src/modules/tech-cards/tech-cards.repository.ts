@@ -259,7 +259,14 @@ export async function getTechCardById(id: number): Promise<TechCardItem | null> 
   return mapTechCardRow(card, ingredientsByCard[card.id] ?? [], componentsByCard[card.id] ?? [], choiceSlotsByCard[card.id] ?? []);
 }
 
-export async function getTechCardOptions(): Promise<Array<{ id: number; name: string; category: string; pizzaSize: string | null; rollSize: string | null }>> {
+export async function getTechCardOptions(): Promise<Array<{
+  id: number;
+  name: string;
+  category: string;
+  pizzaSize: string | null;
+  rollSize: string | null;
+  ingredients: Array<{ productId: number; productName: string; productUnit: string }>;
+}>> {
   const result = await pool.query<{ id: number; name: string; category: string; pizzaSize: string | null; rollSize: string | null }>(
     `
       SELECT "id", "name", "category", "pizzaSize", "rollSize"
@@ -268,7 +275,47 @@ export async function getTechCardOptions(): Promise<Array<{ id: number; name: st
     `,
   );
 
-  return result.rows;
+  if (!result.rows.length) {
+    return [];
+  }
+
+  const ingredients = await pool.query<{
+    technologicalCardId: number;
+    productId: number;
+    productName: string;
+    productUnit: string;
+  }>(
+    `
+      SELECT DISTINCT
+        tci."technologicalCardId",
+        p."id" AS "productId",
+        p."name" AS "productName",
+        p."unit" AS "productUnit"
+      FROM "TechCardIngredient" tci
+      INNER JOIN "Product" p ON p."id" = tci."productId"
+      WHERE tci."technologicalCardId" = ANY($1::int[])
+      ORDER BY p."name" ASC
+    `,
+    [result.rows.map((row) => row.id)],
+  );
+  const ingredientsByCard = ingredients.rows.reduce<Record<number, Array<{ productId: number; productName: string; productUnit: string }>>>(
+    (acc, ingredient) => {
+      const current = acc[ingredient.technologicalCardId] ?? [];
+      current.push({
+        productId: ingredient.productId,
+        productName: ingredient.productName,
+        productUnit: ingredient.productUnit,
+      });
+      acc[ingredient.technologicalCardId] = current;
+      return acc;
+    },
+    {},
+  );
+
+  return result.rows.map((row) => ({
+    ...row,
+    ingredients: ingredientsByCard[row.id] ?? [],
+  }));
 }
 
 export async function createTechCard(input: TechCardInput): Promise<TechCardItem> {

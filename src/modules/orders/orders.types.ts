@@ -18,6 +18,7 @@ export type OrderSource = "SITE" | "PHONE" | "ADMIN";
 export type OrderDraftItem = {
   catalogItemId: number;
   catalogItemVariantId?: number;
+  excludedIngredientIds?: number[];
   quantity: number;
   choices?: OrderDraftItemChoice[];
 };
@@ -39,6 +40,12 @@ export type OrderPackagingUsage = {
   createdAt: string;
 };
 
+export type OrderItemExcludedIngredient = {
+  id: number;
+  productId: number;
+  label: string;
+};
+
 export type OrderItemSummary = {
   id: number;
   catalogItemId: number | null;
@@ -49,6 +56,7 @@ export type OrderItemSummary = {
   totalPriceCents: number;
   catalogCategory: string | null;
   kitchenZone: KitchenZone | null;
+  excludedIngredients: OrderItemExcludedIngredient[];
   packagingUsages: OrderPackagingUsage[];
 };
 

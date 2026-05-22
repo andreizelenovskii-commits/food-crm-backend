@@ -47,6 +47,11 @@ export function parsePublicOrderInput(body: unknown): PublicOrderInput {
     .map((item) => ({
       catalogItemId: Number(item.catalogItemId),
       catalogItemVariantId: normalizeOptionalInteger(item.catalogItemVariantId),
+      excludedIngredientIds: Array.isArray(item.excludedIngredientIds)
+        ? item.excludedIngredientIds
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0)
+        : [],
       quantity: Number(item.quantity),
       choices: Array.isArray(item.choices)
         ? item.choices

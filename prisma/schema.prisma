@@ -116,6 +116,8 @@ model Product {
   writeoffItems WriteoffActItem[]
   orderInventoryMovements OrderInventoryMovement[]
   packagingUsages OrderPackagingUsage[]
+  catalogItemExcludedIngredients CatalogItemExcludedIngredient[]
+  orderItemExcludedIngredients OrderItemExcludedIngredient[]
 }
 
 model Employee {
@@ -214,7 +216,22 @@ model OrderItem {
   unitPriceCents  Int
   totalPriceCents Int
   choices         OrderItemChoice[]
+  excludedIngredients OrderItemExcludedIngredient[]
   packagingUsages OrderPackagingUsage[]
+}
+
+model OrderItemExcludedIngredient {
+  id                              Int                           @id @default(autoincrement())
+  orderItem                       OrderItem                     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItemId                     Int
+  catalogItemExcludedIngredient   CatalogItemExcludedIngredient? @relation(fields: [catalogItemExcludedIngredientId], references: [id], onDelete: SetNull)
+  catalogItemExcludedIngredientId Int?
+  product                         Product                       @relation(fields: [productId], references: [id])
+  productId                       Int
+  label                           String
+
+  @@index([catalogItemExcludedIngredientId])
+  @@index([productId])
 }
 
 model OrderItemChoice {
@@ -322,7 +339,22 @@ model CatalogItem {
   technologicalCard   TechnologicalCard @relation(fields: [technologicalCardId], references: [id])
   technologicalCardId Int
   variants            CatalogItemVariant[]
+  excludedIngredients CatalogItemExcludedIngredient[]
   orderItems          OrderItem[]
+}
+
+model CatalogItemExcludedIngredient {
+  id            Int         @id @default(autoincrement())
+  catalogItem   CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  catalogItemId Int
+  product       Product     @relation(fields: [productId], references: [id])
+  productId     Int
+  label         String
+  displayOrder  Int         @default(0)
+  orderItemExcludedIngredients OrderItemExcludedIngredient[]
+
+  @@unique([catalogItemId, productId])
+  @@index([productId])
 }
 
 model CatalogItemVariant {

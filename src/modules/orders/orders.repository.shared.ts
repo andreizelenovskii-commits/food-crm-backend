@@ -1,6 +1,7 @@
 import type {
   KitchenZone,
   OrderItemSummary,
+  OrderItemExcludedIngredient,
   OrderListItem,
   OrderPackagingUsage,
   OrderSource,
@@ -57,6 +58,13 @@ export type OrderItemRow = {
   totalPriceCents: number;
   catalogCategory: string | null;
   kitchenZone: string | null;
+};
+
+export type OrderItemExcludedIngredientRow = {
+  id: number;
+  orderItemId: number;
+  productId: number;
+  label: string;
 };
 
 export type OrderPackagingUsageRow = {
@@ -154,6 +162,7 @@ function resolveOrderKitchenZone(value: string | null, category: string | null) 
 export function mapOrderItem(
   row: OrderItemRow,
   packagingUsages: OrderPackagingUsage[],
+  excludedIngredients: OrderItemExcludedIngredient[] = [],
 ): OrderItemSummary {
   return {
     id: row.id,
@@ -165,7 +174,16 @@ export function mapOrderItem(
     totalPriceCents: row.totalPriceCents,
     catalogCategory: row.catalogCategory,
     kitchenZone: resolveOrderKitchenZone(row.kitchenZone, row.catalogCategory),
+    excludedIngredients,
     packagingUsages,
+  };
+}
+
+export function mapExcludedIngredient(row: OrderItemExcludedIngredientRow): OrderItemExcludedIngredient {
+  return {
+    id: row.id,
+    productId: row.productId,
+    label: row.label,
   };
 }
 
