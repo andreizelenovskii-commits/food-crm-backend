@@ -2,17 +2,18 @@ export const CATALOG_PRICE_LIST_TYPES = ["CLIENT", "INTERNAL"] as const;
 export const CATALOG_SITE_CATEGORIES = [
   "Пицца",
   "Роллы",
-  "Онигири",
-  "Суши-доги",
   "Фастфуд",
-  "Пасты",
-  "Пасты и салаты",
   "Паназиатская кухня",
-  "Напитки",
-  "Десерты",
-  "Детское меню",
+  "Пасты",
+  "Салаты",
+  "Супы",
+  "Суши-доги",
   "Комбо",
   "Сеты",
+  "Детское меню",
+  "Десерты",
+  "Напитки",
+  "Баббл-напитки",
 ] as const;
 
 export type CatalogPriceListType = (typeof CATALOG_PRICE_LIST_TYPES)[number];

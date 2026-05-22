@@ -46,7 +46,10 @@ export async function registerCatalogRoutes(app: FastifyInstance) {
     const filename = (request.params as { filename?: string }).filename ?? "";
     const upload = getCatalogUpload(filename);
 
-    return reply.type(upload.contentType).send(upload.stream);
+    return reply
+      .header("Cache-Control", "public, max-age=31536000, immutable")
+      .type(upload.contentType)
+      .send(upload.stream);
   });
 
   app.post(
