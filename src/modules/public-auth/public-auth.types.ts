@@ -9,6 +9,7 @@ export type PublicClientProfile = {
   name: string;
   phone: string;
   birthDate: string | null;
+  address: string | null;
   totalSpentCents: number;
   loyaltyLevel: "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | null;
   loyaltyNextLevel: "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | null;

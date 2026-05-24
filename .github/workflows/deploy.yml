@@ -70,13 +70,12 @@ jobs:
           "${SSH[@]}" "APP_DIR='$APP_DIR' RELEASE_DIR='$APP_DIR/releases/$GITHUB_SHA' bash -s" <<'REMOTE'
           set -euo pipefail
           test -f "$APP_DIR/shared/.env"
-          grep -q '^PUBLIC_AUTH_TEST_PHONE=' "$APP_DIR/shared/.env" || echo 'PUBLIC_AUTH_TEST_PHONE=79002000001' >> "$APP_DIR/shared/.env"
-          grep -q '^PUBLIC_AUTH_TEST_CODE=' "$APP_DIR/shared/.env" || echo 'PUBLIC_AUTH_TEST_CODE=111111' >> "$APP_DIR/shared/.env"
+          grep -v -E '^(PUBLIC_AUTH_TEST_PHONE|PUBLIC_AUTH_TEST_CODE)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
+          mv "$APP_DIR/shared/.env.tmp" "$APP_DIR/shared/.env"
           ln -sfn "$APP_DIR/shared/.env" "$RELEASE_DIR/.env"
           cd "$RELEASE_DIR"
           npm ci
           npm run db:deploy
-          npm run public:test-client
           ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
           cd "$APP_DIR/current"
           pm2 delete food-crm-backend || true

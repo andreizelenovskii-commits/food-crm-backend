@@ -8,6 +8,8 @@ import type { OrderDraftItem, OrderListItem, OrderStatus } from "@backend/module
 
 type PublicOrderInput = {
   deliveryAddress: string;
+  recipientPhone: string;
+  paymentMethod: string;
   customerComment: string | null;
   items: OrderDraftItem[];
 };
@@ -35,11 +37,21 @@ function normalizeOptionalInteger(value: unknown) {
 export function parsePublicOrderInput(body: unknown): PublicOrderInput {
   const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};
   const deliveryAddress = normalizeText(payload.deliveryAddress);
+  const recipientPhone = normalizeText(payload.recipientPhone);
+  const paymentMethod = normalizeText(payload.paymentMethod);
   const customerComment = normalizeText(payload.customerComment) || null;
   const rawItems = Array.isArray(payload.items) ? payload.items : [];
 
   if (!deliveryAddress) {
     throw new ValidationError("Укажите адрес доставки");
+  }
+
+  if (!recipientPhone) {
+    throw new ValidationError("Укажите телефон получателя");
+  }
+
+  if (!["cash", "courier_card", "online"].includes(paymentMethod)) {
+    throw new ValidationError("Выберите способ оплаты");
   }
 
   const items = rawItems
@@ -69,7 +81,7 @@ export function parsePublicOrderInput(body: unknown): PublicOrderInput {
     throw new ValidationError("Добавьте позиции в корзину");
   }
 
-  return { deliveryAddress, customerComment, items };
+  return { deliveryAddress, recipientPhone, paymentMethod, customerComment, items };
 }
 
 async function resolvePublicOrderEmployeeId() {
@@ -129,13 +141,24 @@ export async function createPublicOrder(phone: string, input: PublicOrderInput) 
     status: INITIAL_ORDER_STATUS,
     deliveryFeeCents: DEFAULT_DELIVERY_FEE_CENTS,
     source: "SITE",
-    customerPhoneSnapshot: client.phone,
+    customerPhoneSnapshot: input.recipientPhone,
     deliveryAddressSnapshot: input.deliveryAddress,
-    customerComment: input.customerComment,
+    customerComment: buildPublicOrderComment(input.paymentMethod, input.customerComment),
     items: input.items,
   });
 
   return toPublicOrderStatus(order);
+}
+
+function buildPublicOrderComment(paymentMethod: string, customerComment: string | null) {
+  const paymentLabel: Record<string, string> = {
+    cash: "наличные",
+    courier_card: "картой курьеру",
+    online: "онлайн оплата",
+  };
+  const paymentComment = `Оплата: ${paymentLabel[paymentMethod] ?? paymentMethod}.`;
+
+  return customerComment ? `${paymentComment}\n${customerComment}` : paymentComment;
 }
 
 export async function fetchPublicOrderStatus(orderId: number, phone: string) {

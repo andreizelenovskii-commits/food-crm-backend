@@ -8,7 +8,7 @@ type SmsAeroResponse = {
 };
 
 export async function sendSmsCode(phone: string, code: string) {
-  const text = `FoodLike: код подтверждения ${code}. Никому его не сообщайте.`;
+  const text = `FoodLike: ваш код для входа ${code}. Никому его не сообщайте.`;
 
   if (!backendEnv.smsAeroEnabled) {
     console.info(`[sms-dev] ${phone}: ${text}`);

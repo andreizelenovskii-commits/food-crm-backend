@@ -18,8 +18,6 @@ type BackendEnv = {
   smsAeroApiKey: string | null;
   smsAeroSign: string;
   smsAeroEnabled: boolean;
-  publicAuthTestPhone: string | null;
-  publicAuthTestCode: string | null;
   publicOrderEmployeeId: number | null;
 };
 
@@ -109,8 +107,6 @@ export const backendEnv: BackendEnv = {
   smsAeroApiKey: getOptionalEnv("SMSAERO_API_KEY"),
   smsAeroSign: getOptionalEnv("SMSAERO_SIGN") ?? "SMS Aero",
   smsAeroEnabled: parseBoolean(getOptionalEnv("SMSAERO_ENABLED"), true),
-  publicAuthTestPhone: getOptionalEnv("PUBLIC_AUTH_TEST_PHONE"),
-  publicAuthTestCode: getOptionalEnv("PUBLIC_AUTH_TEST_CODE"),
   publicOrderEmployeeId: parseOptionalPositiveInteger(
     getOptionalEnv("PUBLIC_ORDER_EMPLOYEE_ID"),
     "PUBLIC_ORDER_EMPLOYEE_ID",
