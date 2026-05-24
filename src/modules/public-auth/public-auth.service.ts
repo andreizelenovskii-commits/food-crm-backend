@@ -1,7 +1,7 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
 import { parseLoginPhone } from "@backend/lib/phone";
 import { normalizeRussianPhoneForStorage } from "@backend/shared/lib/phone";
-import { createClient, getClientByPhone } from "@backend/modules/clients/clients.repository";
+import { createClient, getClientByPhone, updateClient } from "@backend/modules/clients/clients.repository";
 import type { Client } from "@backend/modules/clients/clients.types";
 import { attachLoyaltyToClient } from "@backend/modules/loyalty/loyalty.rules";
 import {
@@ -21,6 +21,13 @@ type RegisterInput = {
   lastName: string;
   birthDate: string;
   phone: string;
+};
+
+type PublicProfileInput = {
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  address: string | null;
 };
 
 function normalizeText(value: unknown) {
@@ -56,6 +63,20 @@ export function parseRegisterInput(body: unknown): RegisterInput {
   }
 
   return { firstName, lastName, birthDate, phone };
+}
+
+export function parsePublicProfileInput(body: unknown): PublicProfileInput {
+  const payload = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  const firstName = normalizeText(payload.firstName);
+  const lastName = normalizeText(payload.lastName);
+  const birthDate = parseBirthDate(normalizeText(payload.birthDate));
+  const address = normalizeText(payload.address) || null;
+
+  if (!firstName || !lastName) {
+    throw new ValidationError("Укажите имя и фамилию");
+  }
+
+  return { firstName, lastName, birthDate, address };
 }
 
 export function parsePhoneInput(body: unknown) {
@@ -115,6 +136,31 @@ export async function registerPublicClient(input: RegisterInput) {
   });
 
   return attachLoyaltyToClient(client);
+}
+
+export async function updatePublicClientProfile(phone: string, input: PublicProfileInput) {
+  const client = await findPublicClientByPhone(phone);
+
+  if (!client) {
+    throw new ValidationError("Войдите в профиль");
+  }
+
+  const updated = await updateClient(client.id, {
+    name: `${input.firstName} ${input.lastName}`.trim(),
+    type: "CLIENT",
+    email: client.email,
+    phone: client.phone,
+    birthDate: input.birthDate,
+    address: input.address,
+    notes: client.notes,
+    loyaltyLevelOverride: client.loyaltyLevelOverride,
+  });
+
+  if (!updated) {
+    throw new ValidationError("Не удалось обновить профиль");
+  }
+
+  return attachLoyaltyToClient(updated);
 }
 
 export function toPublicClientProfile(client: Client): PublicClientProfile {

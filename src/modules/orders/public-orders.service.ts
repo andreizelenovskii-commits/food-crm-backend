@@ -3,6 +3,7 @@ import { pool } from "@backend/shared/db/pool";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import { findPublicClientByPhone } from "@backend/modules/public-auth/public-auth.service";
 import { createOrder } from "@backend/modules/orders/orders.repository";
+import { updateClient } from "@backend/modules/clients/clients.repository";
 import { INITIAL_ORDER_STATUS, DEFAULT_DELIVERY_FEE_CENTS } from "@backend/modules/orders/orders.workflow";
 import type { OrderDraftItem, OrderListItem, OrderStatus } from "@backend/modules/orders/orders.types";
 
@@ -134,6 +135,8 @@ export async function createPublicOrder(phone: string, input: PublicOrderInput) 
     throw new ValidationError("Войдите или зарегистрируйтесь перед оформлением заказа");
   }
 
+  await saveDeliveryAddressToClient(client, input.deliveryAddress);
+
   const order = await createOrder({
     clientId: client.id,
     employeeId: await resolvePublicOrderEmployeeId(),
@@ -148,6 +151,28 @@ export async function createPublicOrder(phone: string, input: PublicOrderInput) 
   });
 
   return toPublicOrderStatus(order);
+}
+
+async function saveDeliveryAddressToClient(client: NonNullable<Awaited<ReturnType<typeof findPublicClientByPhone>>>, address: string) {
+  const addresses = (client.address ?? "")
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  if (addresses.includes(address)) {
+    return;
+  }
+
+  await updateClient(client.id, {
+    name: client.name,
+    type: client.type,
+    email: client.email,
+    phone: client.phone,
+    birthDate: client.birthDate,
+    address: [...addresses, address].join("\n"),
+    notes: client.notes,
+    loyaltyLevelOverride: client.loyaltyLevelOverride,
+  });
 }
 
 function buildPublicOrderComment(paymentMethod: string, customerComment: string | null) {

@@ -10,10 +10,12 @@ import {
   findPublicClientByPhone,
   parseCodeInput,
   parsePhoneInput,
+  parsePublicProfileInput,
   parseRegisterInput,
   registerPublicClient,
   requestPublicCode,
   toPublicClientProfile,
+  updatePublicClientProfile,
   verifyPublicCode,
 } from "@backend/modules/public-auth/public-auth.service";
 
@@ -106,5 +108,20 @@ export async function registerPublicAuthRoutes(app: FastifyInstance) {
     const session = decodePublicClientSession(request.cookies[backendEnv.clientSessionCookieName]);
     const client = session ? await findPublicClientByPhone(session.phone) : null;
     return { data: client ? toPublicClientProfile(client) : null };
+  });
+
+  app.patch("/api/v1/public-auth/me", async (request) => {
+    const session = decodePublicClientSession(request.cookies[backendEnv.clientSessionCookieName]);
+
+    if (!session) {
+      throw new ValidationError("Войдите в профиль");
+    }
+
+    const client = await updatePublicClientProfile(
+      session.phone,
+      parsePublicProfileInput(getRequestBody(request)),
+    );
+
+    return { data: toPublicClientProfile(client) };
   });
 }
