@@ -1,4 +1,5 @@
 import { ValidationError } from "@backend/shared/errors/app-error";
+import { backendEnv } from "@backend/config/env";
 import { parseLoginPhone } from "@backend/lib/phone";
 import { normalizeRussianPhoneForStorage } from "@backend/shared/lib/phone";
 import { createClient, getClientByPhone } from "@backend/modules/clients/clients.repository";
@@ -88,7 +89,20 @@ export async function requestPublicCode(phone: string, purpose: PublicAuthPurpos
 }
 
 export async function verifyPublicCode(phone: string, purpose: PublicAuthPurpose, code: string) {
+  if (isPublicAuthTestCode(phone, code)) {
+    return;
+  }
+
   await verifyStoredCode(phone, purpose, code);
+}
+
+function isPublicAuthTestCode(phone: string, code: string) {
+  return Boolean(
+    backendEnv.publicAuthTestPhone &&
+      backendEnv.publicAuthTestCode &&
+      phone === backendEnv.publicAuthTestPhone &&
+      code === backendEnv.publicAuthTestCode,
+  );
 }
 
 export async function findPublicClientByPhone(phone: string) {

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch --tsconfig tsconfig.json src/server.ts",
     "admin:create": "tsx --tsconfig tsconfig.json scripts/create-admin.ts",
+    "public:test-client": "tsx --tsconfig tsconfig.json scripts/create-public-test-client.ts",
     "db:seed:dev": "tsx --tsconfig tsconfig.json scripts/seed-dev-data.ts",
     "build": "tsc -p tsconfig.json --noEmit",
     "db:deploy": "prisma migrate deploy",
