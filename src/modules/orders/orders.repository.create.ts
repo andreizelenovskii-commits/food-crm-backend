@@ -34,7 +34,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           c."loyaltyLevelOverride",
           COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
         FROM "Client" c
-        LEFT JOIN "Order" o ON o."clientId" = c."id"
+        LEFT JOIN "Order" o ON o."clientId" = c."id" AND o."status" = 'DELIVERED_PAID'
         WHERE c."id" = $1
         GROUP BY c."id", c."name", c."type", c."loyaltyLevelOverride"
         LIMIT 1

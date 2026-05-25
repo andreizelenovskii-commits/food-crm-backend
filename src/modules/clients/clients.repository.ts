@@ -67,7 +67,7 @@ export async function getAllClients(): Promise<Client[]> {
         COUNT(o."id") AS "ordersCount",
         COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
       FROM "Client" c
-      LEFT JOIN "Order" o ON o."clientId" = c."id"
+      LEFT JOIN "Order" o ON o."clientId" = c."id" AND o."status" = 'DELIVERED_PAID'
       GROUP BY
         c."id",
         c."name",
@@ -107,7 +107,7 @@ export async function getClientById(clientId: number): Promise<Client | null> {
         COUNT(o."id") AS "ordersCount",
         COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
       FROM "Client" c
-      LEFT JOIN "Order" o ON o."clientId" = c."id"
+      LEFT JOIN "Order" o ON o."clientId" = c."id" AND o."status" = 'DELIVERED_PAID'
       WHERE c."id" = $1
       GROUP BY
         c."id",
@@ -155,7 +155,7 @@ export async function getClientByPhone(phone: string): Promise<Client | null> {
         COUNT(o."id") AS "ordersCount",
         COALESCE(SUM(o."totalCents"), 0) AS "totalSpentCents"
       FROM "Client" c
-      LEFT JOIN "Order" o ON o."clientId" = c."id"
+      LEFT JOIN "Order" o ON o."clientId" = c."id" AND o."status" = 'DELIVERED_PAID'
       WHERE c."phone" = $1
       GROUP BY
         c."id",
