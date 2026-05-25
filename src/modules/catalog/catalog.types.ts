@@ -2,6 +2,9 @@ export const CATALOG_PRICE_LIST_TYPES = ["CLIENT", "INTERNAL"] as const;
 export const CATALOG_SITE_CATEGORIES = [
   "Пицца",
   "Роллы",
+  "Холодные роллы",
+  "Запеченные роллы",
+  "Теплые роллы",
   "Фастфуд",
   "Паназиатская кухня",
   "Пасты",

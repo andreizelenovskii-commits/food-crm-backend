@@ -138,6 +138,9 @@ export function resolveKitchenZone(category: string | null): KitchenZone | null 
       return "pizza";
     case "роллы":
     case "ролл":
+    case "холодные роллы":
+    case "запеченные роллы":
+    case "теплые роллы":
     case "онигири":
     case "суши-доги":
       return "rolls";
