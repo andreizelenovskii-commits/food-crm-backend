@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -12,6 +12,11 @@ const UPLOAD_ROOT =
     process.cwd(),
     process.env.NODE_ENV === "production" ? "../shared/uploads/catalog" : "uploads/catalog",
   );
+const LEGACY_UPLOAD_ROOTS = Array.from(new Set([
+  UPLOAD_ROOT,
+  path.resolve(process.cwd(), "uploads/catalog"),
+  path.resolve(process.cwd(), "../shared/uploads/catalog"),
+]));
 const IMAGE_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
@@ -144,9 +149,16 @@ export function getCatalogUpload(filename: string) {
   const contentType =
     Object.entries(IMAGE_TYPES).find(([, typeExtension]) => typeExtension === extension)?.[0] ??
     "application/octet-stream";
+  const uploadPath = LEGACY_UPLOAD_ROOTS
+    .map((uploadRoot) => path.join(uploadRoot, filename))
+    .find((candidatePath) => existsSync(candidatePath));
+
+  if (!uploadPath) {
+    throw new ValidationError("Фото товара не найдено");
+  }
 
   return {
     contentType,
-    stream: createReadStream(path.join(UPLOAD_ROOT, filename)),
+    stream: createReadStream(uploadPath),
   };
 }
