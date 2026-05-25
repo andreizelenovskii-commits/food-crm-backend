@@ -38,6 +38,11 @@ function generateCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+function getMinimumBirthDate() {
+  const today = new Date();
+  return new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+}
+
 function parseBirthDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new ValidationError("Укажите дату рождения");
@@ -46,6 +51,10 @@ function parseBirthDate(value: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime()) || date > new Date()) {
     throw new ValidationError("Укажите корректную дату рождения");
+  }
+
+  if (date > getMinimumBirthDate()) {
+    throw new ValidationError("Регистрация доступна только клиентам старше 18 лет");
   }
 
   return value;
