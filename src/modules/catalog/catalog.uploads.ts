@@ -3,9 +3,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
+import sharp from "sharp";
 import { ValidationError } from "@backend/shared/errors/app-error";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const OPTIMIZED_IMAGE_WIDTH = 1400;
+const OPTIMIZED_IMAGE_HEIGHT = 1100;
+const OPTIMIZED_IMAGE_QUALITY = 82;
 const cwd = process.cwd();
 
 function getProductionAppRoot() {
@@ -35,6 +39,7 @@ const LEGACY_UPLOAD_ROOTS = Array.from(new Set([
   path.resolve(cwd, "../shared/uploads/catalog"),
   path.resolve(cwd, "../../shared/uploads/catalog"),
 ]));
+const OPTIMIZED_UPLOAD_ROOT = path.join(UPLOAD_ROOT, "_optimized");
 const IMAGE_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
@@ -146,10 +151,12 @@ export async function saveCatalogUpload(request: FastifyRequest) {
     throw new ValidationError("Фото товара должно быть не больше 5 МБ");
   }
 
+  const optimized = await optimizeCatalogImage(file);
+
   await mkdir(UPLOAD_ROOT, { recursive: true });
 
-  const filename = `${randomUUID()}${extension}`;
-  await writeFile(path.join(UPLOAD_ROOT, filename), file.content, { flag: "wx" });
+  const filename = `${randomUUID()}${optimized.extension}`;
+  await writeFile(path.join(UPLOAD_ROOT, filename), optimized.content, { flag: "wx" });
 
   return {
     filename,
@@ -158,15 +165,13 @@ export async function saveCatalogUpload(request: FastifyRequest) {
   };
 }
 
-export function getCatalogUpload(filename: string) {
+export async function getCatalogUpload(filename: string) {
   if (!/^[a-f0-9-]+\.(jpg|png|webp|gif)$/i.test(filename)) {
     throw new ValidationError("Некорректное имя файла");
   }
 
   const extension = path.extname(filename).toLowerCase();
-  const contentType =
-    Object.entries(IMAGE_TYPES).find(([, typeExtension]) => typeExtension === extension)?.[0] ??
-    "application/octet-stream";
+  const contentType = getImageContentType(extension);
   const uploadPath = getCandidateUploadRoots()
     .map((uploadRoot) => path.join(uploadRoot, filename))
     .find((candidatePath) => existsSync(candidatePath));
@@ -175,10 +180,91 @@ export function getCatalogUpload(filename: string) {
     throw new ValidationError("Фото товара не найдено");
   }
 
-  return {
-    contentType,
-    stream: createReadStream(uploadPath),
-  };
+  const optimizedPath = await getOptimizedUploadPath(filename);
+
+  if (optimizedPath) {
+    return {
+      contentType: "image/webp",
+      stream: createReadStream(optimizedPath),
+    };
+  }
+
+  return { contentType, stream: createReadStream(uploadPath) };
+}
+
+async function optimizeCatalogImage(file: MultipartFile) {
+  if (file.contentType === "image/gif") {
+    return {
+      content: file.content,
+      extension: IMAGE_TYPES[file.contentType],
+    };
+  }
+
+  try {
+    const content = await sharp(file.content, { failOn: "none" })
+      .rotate()
+      .resize({
+        width: OPTIMIZED_IMAGE_WIDTH,
+        height: OPTIMIZED_IMAGE_HEIGHT,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: OPTIMIZED_IMAGE_QUALITY, effort: 4 })
+      .toBuffer();
+
+    return { content, extension: ".webp" };
+  } catch {
+    return {
+      content: file.content,
+      extension: IMAGE_TYPES[file.contentType],
+    };
+  }
+}
+
+function getImageContentType(extension: string) {
+  return Object.entries(IMAGE_TYPES).find(([, typeExtension]) => typeExtension === extension)?.[0] ??
+    "application/octet-stream";
+}
+
+async function getOptimizedUploadPath(filename: string) {
+  const extension = path.extname(filename).toLowerCase();
+
+  if (extension === ".webp" || extension === ".gif") {
+    return null;
+  }
+
+  const originalPath = getCandidateUploadRoots()
+    .map((uploadRoot) => path.join(uploadRoot, filename))
+    .find((candidatePath) => existsSync(candidatePath));
+
+  if (!originalPath) {
+    return null;
+  }
+
+  const optimizedFilename = `${path.basename(filename, extension)}.webp`;
+  const optimizedPath = path.join(OPTIMIZED_UPLOAD_ROOT, optimizedFilename);
+
+  if (existsSync(optimizedPath)) {
+    return optimizedPath;
+  }
+
+  try {
+    await mkdir(OPTIMIZED_UPLOAD_ROOT, { recursive: true });
+    await sharp(originalPath, { failOn: "none" })
+      .rotate()
+      .resize({
+        width: OPTIMIZED_IMAGE_WIDTH,
+        height: OPTIMIZED_IMAGE_HEIGHT,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: OPTIMIZED_IMAGE_QUALITY, effort: 4 })
+      .toFile(optimizedPath);
+
+    return optimizedPath;
+  } catch {
+    return null;
+  }
 }
 
 function getCandidateUploadRoots() {
