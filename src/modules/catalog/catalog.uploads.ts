@@ -9,6 +9,10 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const cwd = process.cwd();
 
 function getProductionAppRoot() {
+  if (path.basename(cwd) === "current") {
+    return path.dirname(cwd);
+  }
+
   const parentDir = path.dirname(cwd);
 
   return path.basename(parentDir) === "releases" ? path.dirname(parentDir) : cwd;
