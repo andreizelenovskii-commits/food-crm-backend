@@ -6,16 +6,30 @@ import type { FastifyRequest } from "fastify";
 import { ValidationError } from "@backend/shared/errors/app-error";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const cwd = process.cwd();
+
+function getProductionAppRoot() {
+  const parentDir = path.dirname(cwd);
+
+  return path.basename(parentDir) === "releases" ? path.dirname(parentDir) : cwd;
+}
+
+function getDefaultUploadRoot() {
+  if (process.env.NODE_ENV !== "production") {
+    return path.resolve(cwd, "uploads/catalog");
+  }
+
+  return path.resolve(getProductionAppRoot(), "shared/uploads/catalog");
+}
+
 const UPLOAD_ROOT =
   process.env.CATALOG_UPLOAD_DIR?.trim() ||
-  path.resolve(
-    process.cwd(),
-    process.env.NODE_ENV === "production" ? "../shared/uploads/catalog" : "uploads/catalog",
-  );
+  getDefaultUploadRoot();
 const LEGACY_UPLOAD_ROOTS = Array.from(new Set([
   UPLOAD_ROOT,
-  path.resolve(process.cwd(), "uploads/catalog"),
-  path.resolve(process.cwd(), "../shared/uploads/catalog"),
+  path.resolve(cwd, "uploads/catalog"),
+  path.resolve(cwd, "../shared/uploads/catalog"),
+  path.resolve(cwd, "../../shared/uploads/catalog"),
 ]));
 const IMAGE_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
