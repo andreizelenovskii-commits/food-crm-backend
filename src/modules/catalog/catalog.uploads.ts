@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -167,7 +167,7 @@ export function getCatalogUpload(filename: string) {
   const contentType =
     Object.entries(IMAGE_TYPES).find(([, typeExtension]) => typeExtension === extension)?.[0] ??
     "application/octet-stream";
-  const uploadPath = LEGACY_UPLOAD_ROOTS
+  const uploadPath = getCandidateUploadRoots()
     .map((uploadRoot) => path.join(uploadRoot, filename))
     .find((candidatePath) => existsSync(candidatePath));
 
@@ -179,4 +179,24 @@ export function getCatalogUpload(filename: string) {
     contentType,
     stream: createReadStream(uploadPath),
   };
+}
+
+function getCandidateUploadRoots() {
+  const appRoot = getProductionAppRoot();
+  const releaseUploadRoots =
+    process.env.NODE_ENV === "production" ? getReleaseUploadRoots(appRoot) : [];
+
+  return Array.from(new Set([...LEGACY_UPLOAD_ROOTS, ...releaseUploadRoots]));
+}
+
+function getReleaseUploadRoots(appRoot: string) {
+  const releasesRoot = path.join(appRoot, "releases");
+
+  try {
+    return readdirSync(releasesRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => path.join(releasesRoot, entry.name, "uploads/catalog"));
+  } catch {
+    return [];
+  }
 }
