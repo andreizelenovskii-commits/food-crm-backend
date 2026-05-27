@@ -83,9 +83,9 @@ function normalizeCatalogImageUrl(imageUrl: string | null) {
 }
 
 export function buildCatalogSlug(
-  input: Pick<CatalogItemInput, "name" | "priceListType">,
+  input: Pick<CatalogItemInput, "name" | "category" | "priceListType">,
 ) {
-  const baseSlug = slugifyCatalogItemName(input.name) || "catalog-item";
+  const baseSlug = slugifyCatalogItemName(`${input.name}-${input.category}`) || "catalog-item";
 
   return `${baseSlug}-${input.priceListType.toLowerCase()}`;
 }
