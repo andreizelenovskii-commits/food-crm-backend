@@ -71,6 +71,7 @@ export function parsePublicOrderInput(body: unknown): PublicOrderInput {
             .map((choice) => choice && typeof choice === "object" ? choice as Record<string, unknown> : {})
             .map((choice) => ({
               choiceSlotId: Number(choice.choiceSlotId),
+              position: normalizeOptionalInteger(choice.position),
               selectedCatalogItemId: Number(choice.selectedCatalogItemId),
             }))
             .filter((choice) => Number.isInteger(choice.choiceSlotId) && Number.isInteger(choice.selectedCatalogItemId))

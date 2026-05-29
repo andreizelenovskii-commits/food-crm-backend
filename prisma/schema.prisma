@@ -242,9 +242,10 @@ model OrderItemChoice {
   choiceSlotId               Int
   selectedTechnologicalCard  TechnologicalCard @relation("OrderItemSelectedTechCardChoices", fields: [selectedTechnologicalCardId], references: [id])
   selectedTechnologicalCardId Int
+  position                   Int      @default(0)
   quantity                   Float
 
-  @@unique([orderItemId, choiceSlotId])
+  @@unique([orderItemId, choiceSlotId, position])
   @@index([choiceSlotId])
   @@index([selectedTechnologicalCardId])
 }

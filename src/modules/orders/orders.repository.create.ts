@@ -17,6 +17,10 @@ import {
   type OrderRow,
 } from "@backend/modules/orders/orders.repository.shared";
 
+function getChoiceSlotSelectionCount(quantity: number) {
+  return Number.isInteger(quantity) && quantity > 1 ? quantity : 1;
+}
+
 export async function createOrder(input: OrderCreateInput): Promise<OrderListItem> {
   return withTransaction(async (client) => {
     const clientExists = await client.query<{
@@ -133,6 +137,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
     const expectedIsPublished = !input.isInternal;
     const orderChoicesByCatalogItemId = new Map<number, Array<{
       choiceSlotId: number;
+      position: number;
       selectedTechnologicalCardId: number;
       quantity: number;
     }>>();
@@ -162,37 +167,48 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       );
       const choices = item.choices ?? [];
 
-      if (slotsResult.rowCount !== choices.length) {
-        throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
-      }
+      const preparedChoices = slotsResult.rows.flatMap((slot) => {
+        const slotChoices = choices
+          .filter((entry) => entry.choiceSlotId === slot.id)
+          .sort((left, right) => (left.position ?? 0) - (right.position ?? 0));
+        const expectedChoiceCount = getChoiceSlotSelectionCount(slot.quantity);
+        const isLegacySingleChoice = slotChoices.length === 1 && expectedChoiceCount > 1;
 
-      const preparedChoices = slotsResult.rows.map((slot) => {
-        const choice = choices.find((entry) => entry.choiceSlotId === slot.id);
-        const selectedCatalogItem = choice
-          ? catalogItemsById.get(choice.selectedCatalogItemId)
-          : null;
-
-        if (!choice || !selectedCatalogItem) {
+        if (slotChoices.length !== expectedChoiceCount && !isLegacySingleChoice) {
           throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
         }
 
-        if (selectedCatalogItem.isPublished !== expectedIsPublished) {
-          throw new ValidationError("Вариант комбо должен быть из того же прайса, что и заказ");
-        }
+        return slotChoices.map((choice, index) => {
+          const selectedCatalogItem = catalogItemsById.get(choice.selectedCatalogItemId);
 
-        return {
-          choiceSlotId: slot.id,
-          selectedCatalogItem,
-          slot,
-        };
+          if (!selectedCatalogItem) {
+            throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
+          }
+
+          if (selectedCatalogItem.isPublished !== expectedIsPublished) {
+            throw new ValidationError("Вариант комбо должен быть из того же прайса, что и заказ");
+          }
+
+          return {
+            position: isLegacySingleChoice ? 0 : (choice.position ?? index),
+            quantity: isLegacySingleChoice ? slot.quantity : slot.quantity / expectedChoiceCount,
+            selectedCatalogItem,
+            slot,
+          };
+        });
       });
+
+      if (preparedChoices.length !== choices.length) {
+        throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
+      }
 
       if (preparedChoices.length > 0) {
         choiceLabelsByCatalogItemId.set(
           item.catalogItemId,
           preparedChoices.map((choice) => {
             const variant = choice.selectedCatalogItem.pizzaSize ?? choice.selectedCatalogItem.rollSize;
-            return `${choice.slot.name}: ${choice.selectedCatalogItem.name}${variant ? ` ${variant}` : ""}`;
+            const suffix = getChoiceSlotSelectionCount(choice.slot.quantity) > 1 ? ` #${choice.position + 1}` : "";
+            return `${choice.slot.name}${suffix}: ${choice.selectedCatalogItem.name}${variant ? ` ${variant}` : ""}`;
           }),
         );
         const selectedTechCardsResult = await client.query<{
@@ -227,8 +243,9 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
 
             return {
               choiceSlotId: choice.slot.id,
+              position: choice.position,
               selectedTechnologicalCardId: selectedTechCard.id,
-              quantity: choice.slot.quantity,
+              quantity: choice.quantity,
             };
           }),
         );
@@ -393,14 +410,16 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
               "orderItemId",
               "choiceSlotId",
               "selectedTechnologicalCardId",
+              "position",
               "quantity"
             )
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, $5)
           `,
           [
             insertedItem.rows[0].id,
             choice.choiceSlotId,
             choice.selectedTechnologicalCardId,
+            choice.position,
             choice.quantity,
           ],
         );

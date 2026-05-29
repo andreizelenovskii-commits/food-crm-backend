@@ -25,6 +25,7 @@ export type OrderDraftItem = {
 
 export type OrderDraftItemChoice = {
   choiceSlotId: number;
+  position?: number;
   selectedCatalogItemId: number;
 };
 

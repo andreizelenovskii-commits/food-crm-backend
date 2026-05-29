@@ -74,7 +74,7 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
       catalogItemVariantId?: number;
       excludedIngredientIds?: number[];
       quantity: number;
-      choices?: Array<{ choiceSlotId: number; selectedCatalogItemId: number }>;
+      choices?: Array<{ choiceSlotId: number; position?: number; selectedCatalogItemId: number }>;
     }>;
     items = parsed
       .filter((item) => Number.isInteger(item.catalogItemId) && Number.isInteger(item.quantity))
@@ -94,6 +94,7 @@ export function parseCreateOrderInput(formData: FormData): OrderCreateInput {
               )
               .map((choice) => ({
                 choiceSlotId: choice.choiceSlotId,
+                position: Number.isInteger(choice.position) ? choice.position : undefined,
                 selectedCatalogItemId: choice.selectedCatalogItemId,
               }))
           : [],
