@@ -31,6 +31,8 @@ type CatalogChoiceOptionRow = {
   catalogItemId: number;
   name: string;
   category: string | null;
+  imageUrl: string | null;
+  priceCents: number;
   pizzaSize: string | null;
   rollSize: string | null;
 };
@@ -64,6 +66,8 @@ async function hydrateCatalogChoiceSlots(rows: CatalogRow[], publishedOnly: bool
         c."id" AS "catalogItemId",
         c."name",
         c."category",
+        c."imageUrl",
+        c."priceCents",
         t."pizzaSize",
         t."rollSize"
       FROM "TechCardChoiceSlot" s
@@ -101,6 +105,8 @@ async function hydrateCatalogChoiceSlots(rows: CatalogRow[], publishedOnly: bool
         catalogItemId: option.catalogItemId,
         name: option.name,
         category: option.category,
+        imageUrl: option.imageUrl,
+        priceCents: option.priceCents,
         pizzaSize: option.pizzaSize,
         rollSize: option.rollSize,
       })),

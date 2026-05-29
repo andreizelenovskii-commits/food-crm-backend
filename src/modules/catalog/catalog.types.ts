@@ -71,6 +71,8 @@ export type CatalogChoiceOption = {
   catalogItemId: number;
   name: string;
   category: string | null;
+  imageUrl: string | null;
+  priceCents: number;
   pizzaSize: string | null;
   rollSize: string | null;
 };
