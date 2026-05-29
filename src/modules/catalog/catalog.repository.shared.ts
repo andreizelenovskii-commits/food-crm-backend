@@ -14,7 +14,7 @@ export type CatalogRow = {
   name: string;
   slug: string;
   category: string | null;
-  kitchenZone: "pizza" | "rolls" | "fastfood" | null;
+  kitchenZone: "pizza" | "rolls" | "fastfood" | "dispatch" | null;
   pizzaSize: string | null;
   rollSize: string | null;
   description: string | null;

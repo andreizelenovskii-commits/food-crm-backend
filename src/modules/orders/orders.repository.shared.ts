@@ -153,11 +153,11 @@ export function resolveKitchenZone(category: string | null): KitchenZone | null 
 }
 
 export function normalizeKitchenZone(value: string): KitchenZone {
-  return value === "pizza" || value === "rolls" || value === "fastfood" ? value : "fastfood";
+  return value === "pizza" || value === "rolls" || value === "fastfood" || value === "dispatch" ? value : "fastfood";
 }
 
 function resolveOrderKitchenZone(value: string | null, category: string | null) {
-  return value === "pizza" || value === "rolls" || value === "fastfood"
+  return value === "pizza" || value === "rolls" || value === "fastfood" || value === "dispatch"
     ? value
     : resolveKitchenZone(category);
 }

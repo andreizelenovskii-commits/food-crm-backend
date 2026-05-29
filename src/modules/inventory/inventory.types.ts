@@ -13,13 +13,14 @@ export const PRODUCT_CATEGORIES = [
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
 
-export const KITCHEN_ZONES = ["pizza", "rolls", "fastfood"] as const;
+export const KITCHEN_ZONES = ["pizza", "rolls", "fastfood", "dispatch"] as const;
 export type KitchenZone = (typeof KITCHEN_ZONES)[number];
 
 export const KITCHEN_ZONE_LABELS: Record<KitchenZone, string> = {
   pizza: "Пицца",
   rolls: "Роллы",
   fastfood: "Фастфуд",
+  dispatch: "Диспетчерская",
 };
 
 export const WRITEOFF_REASONS = [
