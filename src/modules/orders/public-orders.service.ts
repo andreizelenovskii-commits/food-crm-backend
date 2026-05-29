@@ -73,6 +73,7 @@ export function parsePublicOrderInput(body: unknown): PublicOrderInput {
               choiceSlotId: Number(choice.choiceSlotId),
               position: normalizeOptionalInteger(choice.position),
               selectedCatalogItemId: Number(choice.selectedCatalogItemId),
+              selectedCatalogItemVariantId: normalizeOptionalInteger(choice.selectedCatalogItemVariantId),
             }))
             .filter((choice) => Number.isInteger(choice.choiceSlotId) && Number.isInteger(choice.selectedCatalogItemId))
         : [],

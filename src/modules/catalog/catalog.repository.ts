@@ -29,6 +29,7 @@ type CatalogChoiceSlotRow = {
 type CatalogChoiceOptionRow = {
   choiceSlotId: number;
   catalogItemId: number;
+  catalogItemVariantId: number | null;
   name: string;
   category: string | null;
   imageUrl: string | null;
@@ -64,22 +65,49 @@ async function hydrateCatalogChoiceSlots(rows: CatalogRow[], publishedOnly: bool
       SELECT
         s."id" AS "choiceSlotId",
         c."id" AS "catalogItemId",
+        option."catalogItemVariantId",
         c."name",
         c."category",
         c."imageUrl",
-        c."priceCents",
-        t."pizzaSize",
-        t."rollSize"
+        option."priceCents",
+        option."pizzaSize",
+        option."rollSize"
       FROM "TechCardChoiceSlot" s
-      INNER JOIN "TechnologicalCard" t ON t."category" = s."category"
+      INNER JOIN "CatalogItem" c ON c."isPublished" = $2
+      INNER JOIN LATERAL (
+        SELECT
+          NULL::int AS "catalogItemVariantId",
+          c."technologicalCardId",
+          c."priceCents",
+          t."category",
+          t."pizzaSize",
+          t."rollSize"
+        FROM "TechnologicalCard" t
+        WHERE t."id" = c."technologicalCardId"
+
+        UNION ALL
+
+        SELECT
+          v."id" AS "catalogItemVariantId",
+          v."technologicalCardId",
+          v."priceCents",
+          vt."category",
+          vt."pizzaSize",
+          vt."rollSize"
+        FROM "CatalogItemVariant" v
+        INNER JOIN "TechnologicalCard" vt ON vt."id" = v."technologicalCardId"
+        WHERE v."catalogItemId" = c."id"
+      ) option ON (
+          option."category" = s."category"
+          OR (s."category" = 'Пиццы' AND option."category" = 'Пицца')
+          OR (s."category" = 'Пицца' AND option."category" = 'Пиццы')
+        )
         AND (
           CARDINALITY(s."allowedPizzaSizes") = 0
-          OR t."pizzaSize" = ANY(s."allowedPizzaSizes")
+          OR option."pizzaSize" = ANY(s."allowedPizzaSizes")
         )
-      INNER JOIN "CatalogItem" c ON c."technologicalCardId" = t."id"
-        AND c."isPublished" = $2
       WHERE s."id" = ANY($1::int[])
-      ORDER BY c."category" ASC NULLS LAST, c."name" ASC, t."pizzaSize" ASC NULLS LAST
+      ORDER BY c."category" ASC NULLS LAST, c."name" ASC, option."pizzaSize" ASC NULLS LAST
     `,
     [slots.map((slot) => slot.id), publishedOnly],
   );
@@ -103,6 +131,7 @@ async function hydrateCatalogChoiceSlots(rows: CatalogRow[], publishedOnly: bool
       quantity: slot.quantity,
       options: (optionsBySlot[slot.id] ?? []).map((option) => ({
         catalogItemId: option.catalogItemId,
+        catalogItemVariantId: option.catalogItemVariantId,
         name: option.name,
         category: option.category,
         imageUrl: option.imageUrl,

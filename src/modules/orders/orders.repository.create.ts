@@ -68,7 +68,10 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       ]),
     ];
     const catalogVariantIds = input.items
-      .map((item) => item.catalogItemVariantId)
+      .flatMap((item) => [
+        item.catalogItemVariantId,
+        ...(item.choices ?? []).map((choice) => choice.selectedCatalogItemVariantId),
+      ])
       .filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0);
     const excludedIngredientIds = [
       ...new Set(input.items.flatMap((item) => item.excludedIngredientIds ?? [])),
@@ -180,9 +183,16 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
 
         return slotChoices.map((choice, index) => {
           const selectedCatalogItem = catalogItemsById.get(choice.selectedCatalogItemId);
+          const selectedCatalogVariant = choice.selectedCatalogItemVariantId
+            ? catalogVariantsById.get(choice.selectedCatalogItemVariantId)
+            : null;
 
           if (!selectedCatalogItem) {
             throw new ValidationError(`Для позиции "${rootCatalogItem.name}" выберите все варианты комбо`);
+          }
+
+          if (choice.selectedCatalogItemVariantId && (!selectedCatalogVariant || selectedCatalogVariant.catalogItemId !== selectedCatalogItem.id)) {
+            throw new ValidationError("Выбранный вариант комбо недоступен");
           }
 
           if (selectedCatalogItem.isPublished !== expectedIsPublished) {
@@ -193,6 +203,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
             position: isLegacySingleChoice ? 0 : (choice.position ?? index),
             quantity: isLegacySingleChoice ? slot.quantity : slot.quantity / expectedChoiceCount,
             selectedCatalogItem,
+            selectedCatalogVariant,
             slot,
           };
         });
@@ -206,7 +217,10 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
         choiceLabelsByCatalogItemId.set(
           item.catalogItemId,
           preparedChoices.map((choice) => {
-            const variant = choice.selectedCatalogItem.pizzaSize ?? choice.selectedCatalogItem.rollSize;
+            const variant = choice.selectedCatalogVariant?.pizzaSize ??
+              choice.selectedCatalogVariant?.rollSize ??
+              choice.selectedCatalogItem.pizzaSize ??
+              choice.selectedCatalogItem.rollSize;
             const suffix = getChoiceSlotSelectionCount(choice.slot.quantity) > 1 ? ` #${choice.position + 1}` : "";
             return `${choice.slot.name}${suffix}: ${choice.selectedCatalogItem.name}${variant ? ` ${variant}` : ""}`;
           }),
@@ -221,14 +235,16 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
             FROM "TechnologicalCard"
             WHERE "id" = ANY($1::int[])
           `,
-          [preparedChoices.map((choice) => choice.selectedCatalogItem.technologicalCardId)],
+          [preparedChoices.map((choice) => choice.selectedCatalogVariant?.technologicalCardId ?? choice.selectedCatalogItem.technologicalCardId)],
         );
         const selectedTechCardsById = new Map(selectedTechCardsResult.rows.map((techCard) => [techCard.id, techCard]));
 
         orderChoicesByCatalogItemId.set(
           item.catalogItemId,
           preparedChoices.map((choice) => {
-            const selectedTechCard = selectedTechCardsById.get(choice.selectedCatalogItem.technologicalCardId);
+            const selectedTechnologicalCardId = choice.selectedCatalogVariant?.technologicalCardId ??
+              choice.selectedCatalogItem.technologicalCardId;
+            const selectedTechCard = selectedTechCardsById.get(selectedTechnologicalCardId);
 
             if (!selectedTechCard || selectedTechCard.category !== choice.slot.category) {
               throw new ValidationError("Выбранный вариант комбо не подходит по категории");

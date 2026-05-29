@@ -27,6 +27,7 @@ export type OrderDraftItemChoice = {
   choiceSlotId: number;
   position?: number;
   selectedCatalogItemId: number;
+  selectedCatalogItemVariantId?: number;
 };
 
 export type KitchenZone = "pizza" | "rolls" | "fastfood" | "dispatch";
