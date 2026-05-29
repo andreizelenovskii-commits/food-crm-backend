@@ -186,6 +186,7 @@ function selectCatalogSql(where = "") {
         c."slug",
         c."category",
         c."kitchenZone",
+        c."kitchenZones",
         t."pizzaSize",
         t."rollSize",
         c."description",
@@ -273,13 +274,14 @@ export async function createCatalogItem(input: CatalogItemInput): Promise<Catalo
           "slug",
           "category",
           "kitchenZone",
+          "kitchenZones",
           "description",
           "imageUrl",
           "priceCents",
           "isPublished",
           "technologicalCardId"
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING "id"
       `,
       [
@@ -287,6 +289,7 @@ export async function createCatalogItem(input: CatalogItemInput): Promise<Catalo
         slug,
         input.category,
         input.kitchenZone,
+        input.kitchenZones,
         input.description,
         input.imageUrl,
         input.priceCents,
@@ -329,11 +332,12 @@ export async function updateCatalogItem(
           "slug" = $3,
           "category" = $4,
           "kitchenZone" = $5,
-          "description" = $6,
-          "imageUrl" = $7,
-          "priceCents" = $8,
-          "isPublished" = $9,
-          "technologicalCardId" = $10
+          "kitchenZones" = $6,
+          "description" = $7,
+          "imageUrl" = $8,
+          "priceCents" = $9,
+          "isPublished" = $10,
+          "technologicalCardId" = $11
         WHERE "id" = $1
         RETURNING "id"
       `,
@@ -343,6 +347,7 @@ export async function updateCatalogItem(
         slug,
         input.category,
         input.kitchenZone,
+        input.kitchenZones,
         input.description,
         input.imageUrl,
         input.priceCents,

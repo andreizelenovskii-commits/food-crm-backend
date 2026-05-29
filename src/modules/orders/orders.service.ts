@@ -64,6 +64,7 @@ export async function chooseOrderPackaging(input: {
   orderId: number;
   orderItemId: number;
   unitIndex: number;
+  inputKitchenZone?: string;
   packageProductId: number;
   actorUserId?: number;
 }) {

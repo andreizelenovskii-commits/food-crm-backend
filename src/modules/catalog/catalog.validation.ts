@@ -16,6 +16,7 @@ export type CatalogItemInput = {
   priceListType: CatalogPriceListType;
   category: CatalogSiteCategory;
   kitchenZone: KitchenZone;
+  kitchenZones: KitchenZone[];
   description: string | null;
   imageUrl: string;
   priceCents: number;
@@ -56,6 +57,7 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
   const priceListType = normalizeInput(formData.get("priceListType"));
   const category = normalizeInput(formData.get("category"));
   const kitchenZone = normalizeInput(formData.get("kitchenZone"));
+  const kitchenZones = parseKitchenZones(formData, kitchenZone);
   const description = normalizeInput(formData.get("description"));
   const imageUrl = normalizeInput(formData.get("imageUrl"));
   const price = Number(normalizeInput(formData.get("price")));
@@ -77,6 +79,14 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
 
   if (!KITCHEN_ZONES.includes(kitchenZone as KitchenZone)) {
     throw new ValidationError("Выберите кухонную зону из списка");
+  }
+
+  if (kitchenZones.length === 0 || kitchenZones.some((zone) => !KITCHEN_ZONES.includes(zone))) {
+    throw new ValidationError("Выберите кухонные зоны из списка");
+  }
+
+  if (category !== "Комбо" && kitchenZones.length > 1) {
+    throw new ValidationError("Несколько кухонных зон можно выбрать только для комбо");
   }
 
   if (!isValidImageUrl(imageUrl)) {
@@ -102,6 +112,7 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
     priceListType: priceListType as CatalogPriceListType,
     category: category as CatalogSiteCategory,
     kitchenZone: kitchenZone as KitchenZone,
+    kitchenZones,
     description: description || null,
     imageUrl,
     priceCents: normalizedVariants.find((variant) => variant.isDefault)?.priceCents ?? normalizedVariants[0].priceCents,
@@ -109,6 +120,27 @@ export function parseCatalogItemInput(formData: FormData): CatalogItemInput {
     variants: normalizedVariants,
     excludedIngredients,
   };
+}
+
+function parseKitchenZones(formData: FormData, kitchenZone: string): KitchenZone[] {
+  const raw = normalizeInput(formData.get("kitchenZones"));
+
+  if (!raw) {
+    return kitchenZone && KITCHEN_ZONES.includes(kitchenZone as KitchenZone) ? [kitchenZone as KitchenZone] : [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("Expected array");
+    }
+
+    return [...new Set(parsed.map((zone) => String(zone ?? "").trim()))]
+      .filter((zone): zone is KitchenZone => KITCHEN_ZONES.includes(zone as KitchenZone));
+  } catch {
+    throw new ValidationError("Не удалось прочитать кухонные зоны");
+  }
 }
 
 function parseCatalogExcludedIngredients(formData: FormData): CatalogExcludedIngredientInput[] {

@@ -58,6 +58,7 @@ export type OrderItemRow = {
   totalPriceCents: number;
   catalogCategory: string | null;
   kitchenZone: string | null;
+  kitchenZones: string[];
 };
 
 export type OrderItemExcludedIngredientRow = {
@@ -162,6 +163,20 @@ function resolveOrderKitchenZone(value: string | null, category: string | null) 
     : resolveKitchenZone(category);
 }
 
+function resolveOrderKitchenZones(values: string[], value: string | null, category: string | null) {
+  const normalized = values.filter(
+    (zone): zone is KitchenZone =>
+      zone === "pizza" || zone === "rolls" || zone === "fastfood" || zone === "dispatch",
+  );
+
+  if (normalized.length) {
+    return normalized;
+  }
+
+  const fallback = resolveOrderKitchenZone(value, category);
+  return fallback ? [fallback] : [];
+}
+
 export function mapOrderItem(
   row: OrderItemRow,
   packagingUsages: OrderPackagingUsage[],
@@ -177,6 +192,7 @@ export function mapOrderItem(
     totalPriceCents: row.totalPriceCents,
     catalogCategory: row.catalogCategory,
     kitchenZone: resolveOrderKitchenZone(row.kitchenZone, row.catalogCategory),
+    kitchenZones: resolveOrderKitchenZones(row.kitchenZones, row.kitchenZone, row.catalogCategory),
     excludedIngredients,
     packagingUsages,
   };

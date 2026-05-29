@@ -18,6 +18,7 @@ const CATALOG_FIELDS = [
   "priceListType",
   "category",
   "kitchenZone",
+  "kitchenZones",
   "description",
   "imageUrl",
   "price",

@@ -56,6 +56,7 @@ export type OrderItemSummary = {
   totalPriceCents: number;
   catalogCategory: string | null;
   kitchenZone: KitchenZone | null;
+  kitchenZones: KitchenZone[];
   excludedIngredients: OrderItemExcludedIngredient[];
   packagingUsages: OrderPackagingUsage[];
 };

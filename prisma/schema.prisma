@@ -265,7 +265,7 @@ model OrderPackagingUsage {
   stockQuantityAfter  Float
   createdAt           DateTime @default(now())
 
-  @@unique([orderItemId, unitIndex])
+  @@unique([orderItemId, unitIndex, kitchenZone])
   @@index([orderId, createdAt])
   @@index([packageProductId, createdAt])
 }
@@ -332,6 +332,7 @@ model CatalogItem {
   description         String?
   imageUrl            String?
   kitchenZone         String?
+  kitchenZones        String[]          @default([])
   priceCents          Int
   isPublished         Boolean           @default(false)
   displayOrder        Int               @default(0)

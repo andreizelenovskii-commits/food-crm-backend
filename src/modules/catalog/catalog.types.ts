@@ -33,6 +33,7 @@ export type CatalogItem = {
   priceListType: CatalogPriceListType;
   category: string | null;
   kitchenZone: "pizza" | "rolls" | "fastfood" | "dispatch" | null;
+  kitchenZones: Array<"pizza" | "rolls" | "fastfood" | "dispatch">;
   pizzaSize: string | null;
   rollSize: string | null;
   description: string | null;

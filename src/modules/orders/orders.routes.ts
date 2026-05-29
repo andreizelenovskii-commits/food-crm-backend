@@ -166,6 +166,7 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
     const orderItemId = Number(body?.orderItemId);
     const unitIndex = Number(body?.unitIndex);
     const packageProductId = Number(body?.packageProductId);
+    const kitchenZone = String(body?.kitchenZone ?? "").trim();
 
     if (!user) {
       throw new ValidationError("Пользователь не найден");
@@ -180,6 +181,7 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
       orderId,
       orderItemId,
       unitIndex,
+      inputKitchenZone: kitchenZone || undefined,
       packageProductId,
       actorUserId: user.id,
     });

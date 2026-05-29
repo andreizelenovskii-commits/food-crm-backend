@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { pool } from "@backend/shared/db/pool";
 import { withTransaction } from "@backend/shared/db/transaction";
 import type {
+  KitchenZone,
   OrderListItem,
   OrderStatus,
 } from "@backend/modules/orders/orders.types";
@@ -21,6 +22,25 @@ import {
 } from "@backend/modules/orders/orders.repository.shared";
 
 export { createOrder } from "@backend/modules/orders/orders.repository.create";
+
+function isKitchenZone(value: string | null | undefined): value is KitchenZone {
+  return value === "pizza" || value === "rolls" || value === "fastfood" || value === "dispatch";
+}
+
+function normalizeOrderItemKitchenZones(
+  kitchenZones: string[],
+  kitchenZone: string | null,
+  category: string | null,
+) {
+  const zones = kitchenZones.filter(isKitchenZone);
+
+  if (zones.length) {
+    return zones;
+  }
+
+  const fallback = isKitchenZone(kitchenZone) ? kitchenZone : resolveKitchenZone(category);
+  return fallback ? [fallback] : [];
+}
 
 export async function getOrderById(orderId: number): Promise<OrderListItem | null> {
   const result = await pool.query<OrderRow>(
@@ -188,12 +208,14 @@ export async function addOrderPackagingUsage({
   orderId,
   orderItemId,
   unitIndex,
+  inputKitchenZone,
   packageProductId,
   actorUserId,
 }: {
   orderId: number;
   orderItemId: number;
   unitIndex: number;
+  inputKitchenZone?: string;
   packageProductId: number;
   actorUserId?: number;
 }) {
@@ -204,6 +226,8 @@ export async function addOrderPackagingUsage({
       quantity: number;
       itemName: string;
       catalogCategory: string | null;
+      kitchenZone: string | null;
+      kitchenZones: string[];
     }>(
       `
         SELECT
@@ -211,7 +235,9 @@ export async function addOrderPackagingUsage({
           oi."orderId",
           oi."quantity",
           oi."itemName",
-          ci."category" AS "catalogCategory"
+          ci."category" AS "catalogCategory",
+          ci."kitchenZone",
+          COALESCE(ci."kitchenZones", ARRAY[]::text[]) AS "kitchenZones"
         FROM "OrderItem" oi
         LEFT JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
         WHERE oi."id" = $1 AND oi."orderId" = $2
@@ -226,9 +252,12 @@ export async function addOrderPackagingUsage({
       throw new ValidationError("Позиция заказа не найдена");
     }
 
-    const kitchenZone = resolveKitchenZone(item.catalogCategory);
+    const allowedKitchenZones = normalizeOrderItemKitchenZones(item.kitchenZones, item.kitchenZone, item.catalogCategory);
+    const kitchenZone = inputKitchenZone && isKitchenZone(inputKitchenZone)
+      ? inputKitchenZone
+      : allowedKitchenZones[0] ?? null;
 
-    if (!kitchenZone) {
+    if (!kitchenZone || !allowedKitchenZones.includes(kitchenZone)) {
       throw new ValidationError(`Для позиции "${item.itemName}" не определена кухонная зона`);
     }
 
@@ -240,10 +269,10 @@ export async function addOrderPackagingUsage({
       `
         SELECT "id"
         FROM "OrderPackagingUsage"
-        WHERE "orderItemId" = $1 AND "unitIndex" = $2
+        WHERE "orderItemId" = $1 AND "unitIndex" = $2 AND "kitchenZone" = $3
         LIMIT 1
       `,
-      [orderItemId, unitIndex],
+      [orderItemId, unitIndex, kitchenZone],
     );
 
     if (existingUsage.rowCount) {
@@ -418,7 +447,8 @@ async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListIt
         oi."unitPriceCents",
         oi."totalPriceCents",
         ci."category" AS "catalogCategory",
-        ci."kitchenZone"
+        ci."kitchenZone",
+        COALESCE(ci."kitchenZones", ARRAY[]::text[]) AS "kitchenZones"
       FROM "OrderItem" oi
       LEFT JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
       WHERE oi."orderId" = ANY($1::int[])

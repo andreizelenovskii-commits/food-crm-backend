@@ -15,6 +15,7 @@ export type CatalogRow = {
   slug: string;
   category: string | null;
   kitchenZone: "pizza" | "rolls" | "fastfood" | "dispatch" | null;
+  kitchenZones: Array<"pizza" | "rolls" | "fastfood" | "dispatch">;
   pizzaSize: string | null;
   rollSize: string | null;
   description: string | null;
@@ -102,6 +103,7 @@ export function mapRowToCatalogItem(
     priceListType: mapPriceListType(row.isPublished),
     category: row.category,
     kitchenZone: row.kitchenZone,
+    kitchenZones: row.kitchenZones.length ? row.kitchenZones : row.kitchenZone ? [row.kitchenZone] : [],
     pizzaSize: row.pizzaSize,
     rollSize: row.rollSize,
     description: row.description,
