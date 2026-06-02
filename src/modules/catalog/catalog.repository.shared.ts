@@ -21,6 +21,8 @@ export type CatalogRow = {
   description: string | null;
   imageUrl: string | null;
   priceCents: number;
+  outputQuantity: number;
+  outputUnit: string;
   isPublished: boolean;
   createdAt: Date;
   technologicalCardId: number;
@@ -32,6 +34,8 @@ export type CatalogVariantRow = {
   catalogItemId: number;
   label: string;
   priceCents: number;
+  outputQuantity: number;
+  outputUnit: string;
   isDefault: boolean;
   displayOrder: number;
   technologicalCardId: number;
@@ -109,6 +113,8 @@ export function mapRowToCatalogItem(
     description: row.description,
     imageUrl: normalizeCatalogImageUrl(row.imageUrl),
     priceCents: row.priceCents,
+    outputQuantity: row.outputQuantity,
+    outputUnit: row.outputUnit,
     createdAt: row.createdAt.toISOString(),
     technologicalCardId: row.technologicalCardId,
     technologicalCardName: row.technologicalCardName,
@@ -133,6 +139,8 @@ export function mapRowToCatalogVariant(row: CatalogVariantRow): CatalogItemVaria
     id: row.id,
     label: row.label,
     priceCents: row.priceCents,
+    outputQuantity: row.outputQuantity,
+    outputUnit: row.outputUnit,
     isDefault: row.isDefault,
     displayOrder: row.displayOrder,
     technologicalCardId: row.technologicalCardId,

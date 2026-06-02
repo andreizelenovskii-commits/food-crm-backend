@@ -39,6 +39,8 @@ export type CatalogItem = {
   description: string | null;
   imageUrl: string | null;
   priceCents: number;
+  outputQuantity: number;
+  outputUnit: string;
   createdAt: string;
   technologicalCardId: number;
   technologicalCardName: string;
@@ -59,6 +61,8 @@ export type CatalogItemVariant = {
   id: number;
   label: string;
   priceCents: number;
+  outputQuantity: number;
+  outputUnit: string;
   isDefault: boolean;
   displayOrder: number;
   technologicalCardId: number;
