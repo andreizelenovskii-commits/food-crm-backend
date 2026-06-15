@@ -106,7 +106,7 @@ jobs:
           {
             echo "DATABASE_URL=$STAGING_DATABASE_URL"
             echo "PORT=4100"
-            echo "BACKEND_CORS_ORIGIN=https://dev.crm.crmandromeda.ru,http://localhost:3000,http://127.0.0.1:3000"
+            echo "BACKEND_CORS_ORIGIN=http://localhost:3000,http://127.0.0.1:3000"
             echo "BACKEND_SESSION_COOKIE_DOMAIN=.crmandromeda.ru"
             echo "BACKEND_SESSION_COOKIE_NAME=food_crm_staging_api_session"
           } >> "$APP_DIR/shared/.env"

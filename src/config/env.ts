@@ -52,8 +52,6 @@ function parseCorsOrigins(value: string | null) {
     "http://127.0.0.1:3000",
     "https://crm.crmandromeda.ru",
     "https://crmandromeda.ru",
-    "https://www.crmandromeda.ru",
-    "https://dev.crm.crmandromeda.ru",
   ];
   const configuredOrigins = (value ?? "")
     .split(",")
