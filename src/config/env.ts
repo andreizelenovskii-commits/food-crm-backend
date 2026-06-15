@@ -9,6 +9,7 @@ type BackendEnv = {
   port: number;
   databaseUrl: string;
   sessionSecret: string;
+  passwordPepper: string | null;
   sessionCookieName: string;
   clientSessionCookieName: string;
   sessionCookieDomain: string | null;
@@ -93,11 +94,40 @@ function parseOptionalPositiveInteger(value: string | null, name: string) {
   return parsed;
 }
 
+function assertProductionSecret(name: string, value: string | null) {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  if (!value || value.length < 32) {
+    throw new Error(`${name} must be set to at least 32 random characters in production`);
+  }
+
+  const normalized = value.toLowerCase().replace(/["']/g, "");
+  const unsafeValues = new Set([
+    "local-dev-session-secret-change-before-production",
+    "build-time-placeholder-session-secret",
+    "build-time-placeholder",
+    "change-me",
+  ]);
+
+  if (unsafeValues.has(normalized)) {
+    throw new Error(`${name} looks like a placeholder and must be replaced in production`);
+  }
+}
+
+const sessionSecret = getOptionalEnv("BACKEND_SESSION_SECRET") ?? getRequiredEnv("SESSION_SECRET");
+const passwordPepper = getOptionalEnv("PASSWORD_PEPPER");
+
+assertProductionSecret("SESSION_SECRET/BACKEND_SESSION_SECRET", sessionSecret);
+assertProductionSecret("PASSWORD_PEPPER", passwordPepper);
+
 export const backendEnv: BackendEnv = {
   host: getOptionalEnv("HOST") ?? "0.0.0.0",
   port: parsePort(getOptionalEnv("PORT")),
   databaseUrl: getRequiredEnv("DATABASE_URL"),
-  sessionSecret: getOptionalEnv("BACKEND_SESSION_SECRET") ?? getRequiredEnv("SESSION_SECRET"),
+  sessionSecret,
+  passwordPepper,
   sessionCookieName: getOptionalEnv("BACKEND_SESSION_COOKIE_NAME") ?? "food_crm_api_session",
   clientSessionCookieName: getOptionalEnv("BACKEND_CLIENT_SESSION_COOKIE_NAME") ?? "food_crm_client_session",
   sessionCookieDomain: getOptionalEnv("BACKEND_SESSION_COOKIE_DOMAIN"),

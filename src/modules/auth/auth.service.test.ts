@@ -118,3 +118,14 @@ test("changeUserPassword validates new password strength", async () => {
     ValidationError,
   );
 });
+
+test("verifyPassword accepts old unpeppered hashes after pepper is enabled", () => {
+  const password = "OldPassword123!";
+  const oldHash = hashPassword(password);
+
+  process.env.PASSWORD_PEPPER = "test-pepper-at-least-32-characters-long";
+
+  const result = verifyPassword(password, oldHash);
+  assert.equal(result.valid, true);
+  assert.equal(result.needsRehash, true);
+});

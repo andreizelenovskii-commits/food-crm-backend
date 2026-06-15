@@ -61,10 +61,10 @@ function getPasswordPepper() {
   return getOptionalEnv("PASSWORD_PEPPER");
 }
 
-function buildPasswordSecret(password: string) {
+function buildPasswordSecret(password: string, usePepper = Boolean(getPasswordPepper())) {
   const pepper = getPasswordPepper();
 
-  if (!pepper) {
+  if (!usePepper || !pepper) {
     return password;
   }
 
@@ -75,8 +75,9 @@ function buildScryptHash(
   password: string,
   salt: string,
   options: { N: number; r: number; p: number; maxmem?: number },
+  usePepper?: boolean,
 ) {
-  return scryptSync(buildPasswordSecret(password), salt, KEY_LENGTH, options).toString("hex");
+  return scryptSync(buildPasswordSecret(password, usePepper), salt, KEY_LENGTH, options).toString("hex");
 }
 
 function parsePasswordHash(storedValue: string): ParsedPasswordHash | null {
@@ -212,7 +213,7 @@ export function verifyPassword(password: string, storedValue: string): PasswordV
       N: 1 << 14,
       r: 8,
       p: 1,
-    });
+    }, false);
 
     return {
       valid: safeCompareHashes(parsedHash.hash, candidateHash),
@@ -225,7 +226,7 @@ export function verifyPassword(password: string, storedValue: string): PasswordV
     r: parsedHash.r,
     p: parsedHash.p,
     maxmem: SCRYPT_PARAMS.maxmem,
-  });
+  }, parsedHash.peppered);
 
   const valid = safeCompareHashes(parsedHash.hash, candidateHash);
   const needsRehash =

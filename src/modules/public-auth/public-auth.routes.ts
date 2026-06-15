@@ -51,6 +51,7 @@ function setClientCookie(
     domain: getSessionCookieDomain(request),
     path: "/",
     maxAge: backendEnv.sessionTtlDays * 24 * 60 * 60,
+    expires: new Date(session.expiresAt),
   });
 }
 

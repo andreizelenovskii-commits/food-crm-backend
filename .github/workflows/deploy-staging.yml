@@ -93,6 +93,16 @@ jobs:
 
           grep -v -E '^(DATABASE_URL|PORT|BACKEND_CORS_ORIGIN|BACKEND_SESSION_COOKIE_DOMAIN|BACKEND_SESSION_COOKIE_NAME)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
           mv "$APP_DIR/shared/.env.tmp" "$APP_DIR/shared/.env"
+          CURRENT_PEPPER="$(grep -E '^PASSWORD_PEPPER=' "$APP_DIR/shared/.env" | tail -n 1 | cut -d '=' -f2- || true)"
+          if [ "${#CURRENT_PEPPER}" -lt 32 ]; then
+            grep -v -E '^PASSWORD_PEPPER=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
+            {
+              cat "$APP_DIR/shared/.env.tmp"
+              printf '\nPASSWORD_PEPPER=%s\n' "$(openssl rand -base64 48)"
+            } > "$APP_DIR/shared/.env"
+            rm -f "$APP_DIR/shared/.env.tmp"
+            chmod 600 "$APP_DIR/shared/.env"
+          fi
           {
             echo "DATABASE_URL=$STAGING_DATABASE_URL"
             echo "PORT=4100"
