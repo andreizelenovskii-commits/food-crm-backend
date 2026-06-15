@@ -77,7 +77,7 @@ async function buildAuthUser(payload: {
 
   return {
     ...user,
-    permissions: getPermissionsForRole(user.role),
+    permissions: await getPermissionsForRole(user.role),
   };
 }
 

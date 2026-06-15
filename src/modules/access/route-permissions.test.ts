@@ -14,7 +14,8 @@ type RouteGuardExpectation = {
 };
 
 const PROTECTED_ROUTES: RouteGuardExpectation[] = [
-  { file: "src/modules/access/access.routes.ts", route: "/api/v1/access-model", guard: "authenticateRequest" },
+  { file: "src/modules/access/access.routes.ts", route: "/api/v1/access-model", guard: 'requirePermission("view_settings")' },
+  { file: "src/modules/access/access.routes.ts", route: "/api/v1/access-model/:role", guard: 'requirePermission("manage_settings")' },
   { file: "src/modules/auth/auth.routes.ts", route: "/api/v1/auth/logout", guard: "authenticateRequest" },
   { file: "src/modules/auth/auth.routes.ts", route: "/api/v1/auth/me", guard: "authenticateRequest" },
   { file: "src/modules/catalog/catalog.routes.ts", route: "/api/v1/catalog", guard: 'requirePermission("view_catalog")' },

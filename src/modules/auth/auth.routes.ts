@@ -180,7 +180,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         expiresAt: new Date(session.expiresAt).toISOString(),
         user: {
           ...user,
-          permissions: getPermissionsForRole(user.role),
+          permissions: await getPermissionsForRole(user.role),
         },
       },
     };

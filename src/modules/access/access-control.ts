@@ -3,6 +3,7 @@ import {
   type SessionUser,
   type UserRole,
 } from "@backend/modules/auth/auth.types";
+import { pool } from "@backend/shared/db/pool";
 
 export const ACCESS_PERMISSIONS = [
   "view_dashboard",
@@ -81,6 +82,16 @@ export type AuthenticatedApiUser = SessionUser & {
   permissions: AccessPermission[];
 };
 
+const ACCESS_PERMISSION_SET = new Set<string>(ACCESS_PERMISSIONS);
+
+function normalizePermissions(values: unknown[]) {
+  const permissions = values.filter((value): value is AccessPermission =>
+    typeof value === "string" && ACCESS_PERMISSION_SET.has(value),
+  );
+
+  return Array.from(new Set(permissions));
+}
+
 export function getRoleModel(role: unknown) {
   const normalizedRole = normalizeUserRole(role);
 
@@ -91,15 +102,89 @@ export function getRoleModel(role: unknown) {
   return ROLE_MODELS[normalizedRole];
 }
 
-export function getPermissionsForRole(role: unknown) {
+export function getDefaultPermissionsForRole(role: unknown) {
   return getRoleModel(role)?.permissions ?? [];
+}
+
+export async function getPermissionsForRole(role: unknown) {
+  const normalizedRole = normalizeUserRole(role);
+
+  if (!normalizedRole) {
+    return [];
+  }
+
+  const result = await pool.query<{ permission: string }>(
+    `
+      SELECT "permission"
+      FROM "RolePermission"
+      WHERE "role" = $1
+      ORDER BY "permission" ASC
+    `,
+    [normalizedRole],
+  ).catch(() => ({ rows: [] as Array<{ permission: string }> }));
+
+  if (result.rows.length === 0) {
+    return getDefaultPermissionsForRole(normalizedRole);
+  }
+
+  return normalizePermissions(result.rows.map((row) => row.permission));
+}
+
+export async function getRoleModels() {
+  return Promise.all(
+    Object.values(ROLE_MODELS).map(async (model) => ({
+      ...model,
+      permissions: await getPermissionsForRole(model.role),
+    })),
+  );
+}
+
+export async function replaceRolePermissions(role: unknown, permissions: unknown[]) {
+  const normalizedRole = normalizeUserRole(role);
+
+  if (!normalizedRole) {
+    return null;
+  }
+
+  const normalizedPermissions = normalizePermissions(permissions);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM "RolePermission" WHERE "role" = $1`, [normalizedRole]);
+
+    for (const permission of normalizedPermissions) {
+      await client.query(
+        `
+          INSERT INTO "RolePermission" ("role", "permission")
+          VALUES ($1, $2)
+          ON CONFLICT ("role", "permission") DO NOTHING
+        `,
+        [normalizedRole, permission],
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return {
+    role: normalizedRole,
+    permissions: normalizedPermissions,
+  };
 }
 
 export function hasApiPermission(
   userOrRole: AuthenticatedApiUser | UserRole,
   permission: AccessPermission,
 ) {
-  const rawRole = typeof userOrRole === "string" ? userOrRole : userOrRole.role;
+  if (typeof userOrRole !== "string") {
+    return userOrRole.permissions.includes(permission);
+  }
 
-  return getPermissionsForRole(rawRole).includes(permission);
+  return getDefaultPermissionsForRole(userOrRole).includes(permission);
 }

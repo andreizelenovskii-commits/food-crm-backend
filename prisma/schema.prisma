@@ -54,6 +54,14 @@ model AuthAttempt {
   @@map("auth_attempts")
 }
 
+model RolePermission {
+  role       String
+  permission String
+  createdAt  DateTime @default(now())
+
+  @@id([role, permission])
+}
+
 model AuditLog {
   id          Int      @id @default(autoincrement())
   actorUserId Int?
