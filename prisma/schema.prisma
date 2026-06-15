@@ -36,6 +36,7 @@ model Session {
   createdAt DateTime  @default(now())
   expiresAt DateTime
   revokedAt DateTime?
+  revokedReason String?
   userAgent String?
   ip        String?
 

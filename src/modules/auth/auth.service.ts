@@ -15,7 +15,7 @@ import { revokeOtherAuthSessions } from "@backend/modules/auth/auth.session.repo
 type AuthenticateDependencies = {
   users: AuthUserRepository;
   sessions: {
-    revokeOther: (userId: number, activeSessionId: string | null) => Promise<void>;
+    revokeOther: (userId: number, activeSessionId: string | null, reason?: string) => Promise<void>;
   };
 };
 
@@ -103,5 +103,5 @@ export async function changeUserPassword(
   }
 
   await dependencies.users.updatePasswordHash(user.id, newPasswordHash);
-  await dependencies.sessions.revokeOther(user.id, input.activeSessionId ?? null);
+  await dependencies.sessions.revokeOther(user.id, input.activeSessionId ?? null, "password_changed");
 }

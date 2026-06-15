@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import type { SessionUser } from "@backend/modules/auth/auth.types";
 import {
-  findActiveAuthSession,
+  findAuthSessionStatus,
   resolveSessionUserIdentity,
 } from "@backend/modules/auth/auth.session.repository";
 import {
@@ -10,7 +10,7 @@ import {
   type AccessPermission,
   type AuthenticatedApiUser,
 } from "@backend/modules/access/access-control";
-import { decodeApiSessionToken } from "@backend/modules/auth/session-token";
+import { decodeApiSessionTokenDetailed } from "@backend/modules/auth/session-token";
 import { AuthenticationError } from "@backend/shared/errors/app-error";
 import { AuthorizationError } from "@backend/lib/http-errors";
 
@@ -18,7 +18,45 @@ declare module "fastify" {
   interface FastifyRequest {
     authUser: AuthenticatedApiUser | null;
     authSessionId: string | null;
+    authFailureReason: AuthFailureReason | null;
   }
+}
+
+export type AuthFailureReason =
+  | "missing_session"
+  | "invalid_session"
+  | "expired_session"
+  | "revoked_session"
+  | "other_device"
+  | "password_changed"
+  | "user_not_found";
+
+export function authFailureMessage(reason: AuthFailureReason | null) {
+  if (reason === "expired_session") {
+    return "Сессия истекла. Войдите снова.";
+  }
+
+  if (reason === "other_device") {
+    return "Выполнен вход с другого устройства. Для безопасности текущая сессия завершена.";
+  }
+
+  if (reason === "password_changed") {
+    return "Пароль был изменён. Войди снова с новым паролем.";
+  }
+
+  if (reason === "revoked_session") {
+    return "Сессия завершена. Войдите снова.";
+  }
+
+  if (reason === "invalid_session") {
+    return "Сессия повреждена или cookie устарела. Войдите снова.";
+  }
+
+  if (reason === "user_not_found") {
+    return "Аккаунт больше не найден или доступ был изменён. Войдите снова.";
+  }
+
+  return "Требуется вход в CRM.";
 }
 
 function getBearerToken(request: FastifyRequest) {
@@ -53,9 +91,9 @@ async function buildAuthUser(payload: {
     return null;
   }
 
-  const session = await findActiveAuthSession(payload.sessionId, payload.userId);
+  const sessionStatus = await findAuthSessionStatus(payload.sessionId, payload.userId);
 
-  if (!session) {
+  if (sessionStatus.status !== "active") {
     return null;
   }
 
@@ -91,19 +129,42 @@ export async function resolveAuthUser(request: FastifyRequest) {
   if (!token) {
     request.authUser = null;
     request.authSessionId = null;
+    request.authFailureReason = "missing_session";
     return null;
   }
 
-  const payload = decodeApiSessionToken(token);
+  const decoded = decodeApiSessionTokenDetailed(token);
 
-  if (!payload) {
+  if (!decoded.ok) {
     request.authUser = null;
     request.authSessionId = null;
+    request.authFailureReason = decoded.reason === "expired" ? "expired_session" : "invalid_session";
+    return null;
+  }
+
+  const payload = decoded.payload;
+
+  const sessionStatus = await findAuthSessionStatus(payload.sessionId, payload.userId);
+
+  if (sessionStatus.status !== "active") {
+    request.authUser = null;
+    request.authSessionId = null;
+    request.authFailureReason =
+      sessionStatus.status === "expired"
+        ? "expired_session"
+        : sessionStatus.status === "revoked" && sessionStatus.session.revokedReason === "other_device"
+          ? "other_device"
+          : sessionStatus.status === "revoked" && sessionStatus.session.revokedReason === "password_changed"
+            ? "password_changed"
+          : sessionStatus.status === "revoked"
+            ? "revoked_session"
+            : "invalid_session";
     return null;
   }
 
   request.authUser = await buildAuthUser(payload);
   request.authSessionId = request.authUser ? payload.sessionId : null;
+  request.authFailureReason = request.authUser ? null : "user_not_found";
   return request.authUser;
 }
 
@@ -111,7 +172,7 @@ export const authenticateRequest: preHandlerHookHandler = async (request) => {
   const user = await resolveAuthUser(request);
 
   if (!user) {
-    throw new AuthenticationError("Authentication required");
+    throw new AuthenticationError(authFailureMessage(request.authFailureReason));
   }
 };
 
@@ -120,7 +181,7 @@ export function requirePermission(permission: AccessPermission): preHandlerHookH
     const user = await resolveAuthUser(request);
 
     if (!user) {
-      throw new AuthenticationError("Authentication required");
+      throw new AuthenticationError(authFailureMessage(request.authFailureReason));
     }
 
     if (!hasApiPermission(user, permission)) {

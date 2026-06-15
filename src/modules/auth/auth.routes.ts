@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { authenticateUser, changeUserPassword } from "@backend/modules/auth/auth.service";
-import { ValidationError } from "@backend/shared/errors/app-error";
+import { AuthenticationError, ValidationError } from "@backend/shared/errors/app-error";
 import { getPermissionsForRole } from "@backend/modules/access/access-control";
-import { authenticateRequest, resolveAuthUser } from "@backend/modules/auth/auth-context";
+import { authenticateRequest, authFailureMessage, resolveAuthUser } from "@backend/modules/auth/auth-context";
 import {
   createApiSessionToken,
   getApiSessionExpiresAt,
@@ -11,6 +11,7 @@ import {
 import {
   createAuthSession,
   revokeAuthSession,
+  revokeOtherAuthSessions,
 } from "@backend/modules/auth/auth.session.repository";
 import { backendEnv } from "@backend/config/env";
 import { getRequestBody, getStringBodyField } from "@backend/lib/request";
@@ -143,6 +144,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       userAgent: getUserAgent(request.headers),
       ip: ipAddress,
     });
+    await revokeOtherAuthSessions(user.id, sessionId, "other_device");
     const session = createApiSessionToken({
       sessionId,
       userId: user.id,
@@ -190,7 +192,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const user = await resolveAuthUser(request);
 
     if (user && request.authSessionId) {
-      await revokeAuthSession(request.authSessionId, user.id);
+      await revokeAuthSession(request.authSessionId, user.id, "manual_logout");
       request.log.info({
         event: "auth.logout",
         userId: user.id,
@@ -227,7 +229,21 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return { data: { success: true } };
   });
 
-  app.get("/api/v1/auth/me", { preHandler: authenticateRequest }, async (request) => ({
-    data: await resolveAuthUser(request),
-  }));
+  app.get("/api/v1/auth/me", async (request) => {
+    const user = await resolveAuthUser(request);
+
+    if (!user) {
+      request.log.warn({
+        event: "auth.me.failed",
+        reason: request.authFailureReason ?? "unknown",
+        ip: getRequestIp(request.headers, request.ip),
+        origin: getRequestOrigin(request.headers),
+      });
+      throw new AuthenticationError(authFailureMessage(request.authFailureReason));
+    }
+
+    return {
+      data: user,
+    };
+  });
 }

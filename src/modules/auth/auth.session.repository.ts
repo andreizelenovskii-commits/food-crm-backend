@@ -22,7 +22,14 @@ type AuthSessionRow = {
   userId: number;
   expiresAt: Date;
   revokedAt: Date | null;
+  revokedReason: string | null;
 };
+
+export type AuthSessionStatus =
+  | { status: "active"; session: AuthSessionRow }
+  | { status: "expired"; session: AuthSessionRow }
+  | { status: "revoked"; session: AuthSessionRow }
+  | { status: "missing" };
 
 type CreateAuthSessionInput = {
   userId: number;
@@ -82,45 +89,63 @@ export async function createAuthSession(input: CreateAuthSessionInput) {
 }
 
 export async function findActiveAuthSession(sessionId: string, userId: number) {
+  const status = await findAuthSessionStatus(sessionId, userId);
+
+  return status.status === "active" ? status.session : null;
+}
+
+export async function findAuthSessionStatus(sessionId: string, userId: number): Promise<AuthSessionStatus> {
   const result = await pool.query<AuthSessionRow>(
     `
-      SELECT "sessionId", "userId", "expiresAt", "revokedAt"
+      SELECT "sessionId", "userId", "expiresAt", "revokedAt", "revokedReason"
       FROM "sessions"
       WHERE "sessionId" = $1
         AND "userId" = $2
-        AND "revokedAt" IS NULL
-        AND "expiresAt" > NOW()
       LIMIT 1
     `,
     [sessionId, userId],
   ).catch(() => ({ rows: [] as AuthSessionRow[] }));
 
-  return result.rows[0] ?? null;
+  const session = result.rows[0];
+
+  if (!session) {
+    return { status: "missing" };
+  }
+
+  if (session.revokedAt) {
+    return { status: "revoked", session };
+  }
+
+  if (session.expiresAt.getTime() <= Date.now()) {
+    return { status: "expired", session };
+  }
+
+  return { status: "active", session };
 }
 
-export async function revokeAuthSession(sessionId: string, userId: number) {
+export async function revokeAuthSession(sessionId: string, userId: number, reason = "manual_logout") {
   await pool.query(
     `
       UPDATE "sessions"
-      SET "revokedAt" = NOW()
+      SET "revokedAt" = NOW(), "revokedReason" = $3
       WHERE "sessionId" = $1
         AND "userId" = $2
         AND "revokedAt" IS NULL
     `,
-    [sessionId, userId],
+    [sessionId, userId, reason],
   );
 }
 
-export async function revokeOtherAuthSessions(userId: number, activeSessionId: string | null) {
+export async function revokeOtherAuthSessions(userId: number, activeSessionId: string | null, reason = "other_device") {
   await pool.query(
     `
       UPDATE "sessions"
-      SET "revokedAt" = NOW()
+      SET "revokedAt" = NOW(), "revokedReason" = $3
       WHERE "userId" = $1
         AND "revokedAt" IS NULL
         AND ($2::text IS NULL OR "sessionId" <> $2)
     `,
-    [userId, activeSessionId],
+    [userId, activeSessionId, reason],
   );
 }
 

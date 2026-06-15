@@ -8,7 +8,7 @@ import type { AuthUser } from "@backend/modules/auth/auth.types";
 
 function createRepository(user: AuthUser | null) {
   let passwordHash = user?.passwordHash ?? "";
-  const revokedSessions: Array<{ userId: number; activeSessionId: string | null }> = [];
+  const revokedSessions: Array<{ userId: number; activeSessionId: string | null; reason?: string }> = [];
 
   const repository: AuthUserRepository = {
     async findById(userId) {
@@ -44,8 +44,8 @@ function createRepository(user: AuthUser | null) {
   return {
     repository,
     sessions: {
-      revokeOther: async (userId: number, activeSessionId: string | null) => {
-        revokedSessions.push({ userId, activeSessionId });
+      revokeOther: async (userId: number, activeSessionId: string | null, reason?: string) => {
+        revokedSessions.push({ userId, activeSessionId, reason });
       },
     },
     getPasswordHash: () => passwordHash,
@@ -74,7 +74,9 @@ test("changeUserPassword verifies current password and stores a strong new hash"
 
   assert.notEqual(getPasswordHash(), initialPasswordHash);
   assert.equal(verifyPassword("NewPassword123!", getPasswordHash()).valid, true);
-  assert.deepEqual(getRevokedSessions(), [{ userId: 1, activeSessionId: "current-session" }]);
+  assert.deepEqual(getRevokedSessions(), [
+    { userId: 1, activeSessionId: "current-session", reason: "password_changed" },
+  ]);
 });
 
 test("changeUserPassword rejects invalid current password", async () => {

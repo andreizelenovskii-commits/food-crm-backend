@@ -14,6 +14,10 @@ export type ApiSessionPayload = {
   expiresAt: number;
 };
 
+export type DecodeApiSessionTokenResult =
+  | { ok: true; payload: ApiSessionPayload }
+  | { ok: false; reason: "invalid" | "expired" };
+
 function sign(payload: string) {
   return createHmac("sha256", backendEnv.sessionSecret).update(payload).digest("hex");
 }
@@ -42,11 +46,11 @@ export function createApiSessionToken(
   };
 }
 
-export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
+export function decodeApiSessionTokenDetailed(value: string): DecodeApiSessionTokenResult {
   const [encodedPayload, signature] = value.split(".");
 
   if (!encodedPayload || !signature) {
-    return null;
+    return { ok: false, reason: "invalid" };
   }
 
   const expectedSignature = sign(encodedPayload);
@@ -54,11 +58,11 @@ export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
   const expectedBuffer = Buffer.from(expectedSignature, "hex");
 
   if (signatureBuffer.length !== expectedBuffer.length) {
-    return null;
+    return { ok: false, reason: "invalid" };
   }
 
   if (!timingSafeEqual(signatureBuffer, expectedBuffer)) {
-    return null;
+    return { ok: false, reason: "invalid" };
   }
 
   try {
@@ -67,22 +71,31 @@ export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
     ) as ApiSessionPayload & { email?: string };
 
     if (payload.expiresAt <= Date.now()) {
-      return null;
+      return { ok: false, reason: "expired" };
     }
 
     const phone = payload.phone ?? payload.email ?? "";
 
     if (!phone || typeof payload.sessionId !== "string" || !payload.sessionId) {
-      return null;
+      return { ok: false, reason: "invalid" };
     }
 
     return {
-      ...payload,
-      phone,
+      ok: true,
+      payload: {
+        ...payload,
+        phone,
+      },
     };
   } catch {
-    return null;
+    return { ok: false, reason: "invalid" };
   }
+}
+
+export function decodeApiSessionToken(value: string): ApiSessionPayload | null {
+  const result = decodeApiSessionTokenDetailed(value);
+
+  return result.ok ? result.payload : null;
 }
 
 export function getSessionMaxAgeSeconds() {
