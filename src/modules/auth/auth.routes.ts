@@ -40,6 +40,29 @@ function getUserAgent(headers: Record<string, unknown>) {
   return typeof userAgent === "string" && userAgent.trim() ? userAgent.trim() : null;
 }
 
+function maskLogin(login: string) {
+  const trimmed = login.trim();
+  if (!trimmed) {
+    return "empty";
+  }
+
+  if (/^7\d{10}$/.test(trimmed)) {
+    return `${trimmed.slice(0, 2)}******${trimmed.slice(-3)}`;
+  }
+
+  const [name = "", domain = ""] = trimmed.split("@");
+  if (!domain) {
+    return `${trimmed.slice(0, 2)}***`;
+  }
+
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function getRequestOrigin(headers: Record<string, unknown>) {
+  const origin = headers.origin;
+  return typeof origin === "string" && origin.trim() ? origin.trim() : null;
+}
+
 function getSessionCookieDomain(request: { hostname: string; headers: Record<string, unknown> }) {
   if (backendEnv.sessionCookieDomain) {
     return backendEnv.sessionCookieDomain;
@@ -63,8 +86,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     const body = getRequestBody(request);
     const password = getStringBodyField(body, "password");
     const loginRaw = getStringBodyField(body, "phone") || getStringBodyField(body, "email");
+    const ipAddress = getRequestIp(request.headers, request.ip);
 
     if (!loginRaw.trim() || !password) {
+      request.log.warn({
+        event: "auth.login.validation_failed",
+        reason: "missing_credentials",
+        ip: ipAddress,
+        origin: getRequestOrigin(request.headers),
+      });
       throw new ValidationError("Укажи номер телефона и пароль");
     }
 
@@ -74,6 +104,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     } catch {
       const legacy = loginRaw.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legacy)) {
+        request.log.warn({
+          event: "auth.login.validation_failed",
+          reason: "invalid_login_format",
+          login: maskLogin(loginRaw),
+          ip: ipAddress,
+          origin: getRequestOrigin(request.headers),
+        });
         throw new ValidationError(
           "Введи номер телефона в формате +7 и ещё 10 цифр или корректный email для входа",
         );
@@ -81,17 +118,30 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       login = legacy;
     }
 
-    const user = await authenticateUser(
-      { login, password },
-      undefined,
-      { ipAddress: getRequestIp(request.headers, request.ip) },
-    );
+    let user: Awaited<ReturnType<typeof authenticateUser>>;
+    try {
+      user = await authenticateUser(
+        { login, password },
+        undefined,
+        { ipAddress },
+      );
+    } catch (error) {
+      request.log.warn({
+        event: "auth.login.failed",
+        login: maskLogin(login),
+        ip: ipAddress,
+        origin: getRequestOrigin(request.headers),
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+      throw error;
+    }
+
     const expiresAt = getApiSessionExpiresAt();
     const sessionId = await createAuthSession({
       userId: user.id,
       expiresAt: new Date(expiresAt),
       userAgent: getUserAgent(request.headers),
-      ip: getRequestIp(request.headers, request.ip),
+      ip: ipAddress,
     });
     const session = createApiSessionToken({
       sessionId,
@@ -109,6 +159,19 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       domain: getSessionCookieDomain(request),
       path: "/",
       maxAge: getSessionMaxAgeSeconds(),
+      expires: new Date(session.expiresAt),
+    });
+
+    request.log.info({
+      event: "auth.login.success",
+      userId: user.id,
+      role: user.role,
+      login: maskLogin(user.phone),
+      sessionId,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      ttlDays: backendEnv.sessionTtlDays,
+      ip: ipAddress,
+      origin: getRequestOrigin(request.headers),
     });
 
     return {
@@ -128,6 +191,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     if (user && request.authSessionId) {
       await revokeAuthSession(request.authSessionId, user.id);
+      request.log.info({
+        event: "auth.logout",
+        userId: user.id,
+        sessionId: request.authSessionId,
+        ip: getRequestIp(request.headers, request.ip),
+        origin: getRequestOrigin(request.headers),
+      });
     }
 
     reply.clearCookie(backendEnv.sessionCookieName, {
