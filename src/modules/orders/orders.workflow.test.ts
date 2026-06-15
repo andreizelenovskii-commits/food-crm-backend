@@ -27,14 +27,17 @@ test("order workflow documents stage owners", () => {
 
 test("role ownership gates order status transitions", () => {
   assert.equal(canAdvanceOrder("SENT_TO_KITCHEN", "Повар"), true);
+  assert.equal(canAdvanceOrder("SENT_TO_KITCHEN", "Шеф повар"), true);
   assert.equal(canAdvanceOrder("SENT_TO_KITCHEN", "Диспетчер"), false);
   assert.equal(canAdvanceOrder("READY", "Диспетчер"), true);
   assert.equal(canAdvanceOrder("READY", "Курьер"), false);
   assert.equal(canAdvanceOrder("PACKED", "Курьер"), true);
+  assert.equal(canAdvanceOrder("PACKED", "Старший курьер"), true);
   assert.equal(canAdvanceOrder("PACKED", "Повар"), false);
 });
 
 test("managers can advance active orders but nobody advances closed orders", () => {
+  assert.equal(canAdvanceOrder("READY", "Администратор"), true);
   assert.equal(canAdvanceOrder("READY", "Управляющий"), true);
   assert.equal(canAdvanceOrder("CANCELLED", "Управляющий"), false);
   assert.equal(canAdvanceOrder("DELIVERED_PAID", "admin"), false);

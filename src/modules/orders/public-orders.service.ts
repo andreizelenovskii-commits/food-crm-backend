@@ -107,7 +107,9 @@ async function resolvePublicOrderEmployeeId() {
         CASE "role"
           WHEN 'Диспетчер' THEN 1
           WHEN 'Управляющий' THEN 2
-          ELSE 3
+          WHEN 'Администратор' THEN 3
+          WHEN 'admin' THEN 4
+          ELSE 5
         END,
         "id" ASC
       LIMIT 1

@@ -31,12 +31,27 @@ export type RoleModel = {
 export const ROLE_MODELS: Record<UserRole, RoleModel> = {
   admin: {
     role: "admin",
-    label: "Управляющий",
+    label: "Администратор",
+    permissions: [...ACCESS_PERMISSIONS],
+  },
+  "Администратор": {
+    role: "Администратор",
+    label: "Администратор",
+    permissions: [...ACCESS_PERMISSIONS],
+  },
+  "Шеф повар": {
+    role: "Шеф повар",
+    label: "Шеф повар",
     permissions: [...ACCESS_PERMISSIONS],
   },
   "Управляющий": {
     role: "Управляющий",
     label: "Управляющий",
+    permissions: [...ACCESS_PERMISSIONS],
+  },
+  "Старший курьер": {
+    role: "Старший курьер",
+    label: "Старший курьер",
     permissions: [...ACCESS_PERMISSIONS],
   },
   "Диспетчер": {

@@ -40,7 +40,13 @@ const NEXT_ACTION_LABELS: Partial<Record<OrderStatus, string>> = {
 };
 
 export function isManagerRole(role: UserRole) {
-  return role === "admin" || role === "Управляющий";
+  return (
+    role === "admin" ||
+    role === "Администратор" ||
+    role === "Шеф повар" ||
+    role === "Управляющий" ||
+    role === "Старший курьер"
+  );
 }
 
 export function canAdjustDeliveryFee(role: UserRole) {

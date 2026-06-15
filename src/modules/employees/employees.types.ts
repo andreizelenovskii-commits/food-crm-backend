@@ -1,11 +1,28 @@
 export const EMPLOYEE_ROLES = [
+  "Администратор",
+  "Шеф повар",
   "Управляющий",
+  "Старший курьер",
   "Повар",
   "Диспетчер",
   "Курьер",
 ] as const;
 
 export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
+
+export const EMPLOYEE_ROLE_GROUPS = [
+  {
+    title: "Руководители",
+    roles: ["Шеф повар", "Администратор", "Управляющий", "Старший курьер"],
+  },
+  {
+    title: "Сотрудники",
+    roles: ["Повар", "Курьер", "Диспетчер"],
+  },
+] as const satisfies ReadonlyArray<{
+  title: string;
+  roles: readonly EmployeeRole[];
+}>;
 
 export const EMPLOYEE_ADJUSTMENT_TYPES = ["ADVANCE", "FINE", "DEBT"] as const;
 export const EMPLOYEE_ADJUSTMENT_LABELS: Record<

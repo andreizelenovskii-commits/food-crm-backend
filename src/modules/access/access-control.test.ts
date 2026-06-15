@@ -7,8 +7,11 @@ import {
 
 test("admin and manager have full operational permissions", () => {
   assert.equal(hasApiPermission("admin", "manage_settings"), true);
+  assert.equal(hasApiPermission("Администратор", "manage_employees"), true);
+  assert.equal(hasApiPermission("Шеф повар", "manage_inventory"), true);
   assert.equal(hasApiPermission("Управляющий", "manage_inventory"), true);
   assert.equal(hasApiPermission("Управляющий", "manage_orders"), true);
+  assert.equal(hasApiPermission("Старший курьер", "manage_orders"), true);
 });
 
 test("dispatcher can manage orders but cannot manage inventory", () => {
