@@ -86,6 +86,10 @@ jobs:
           cd "$RELEASE_DIR"
           npm ci
           npm run db:deploy
+          WORKSPACE_PASSWORD='${{ secrets.WORKSPACE_PASSWORD }}'
+          if [ -n "$WORKSPACE_PASSWORD" ]; then
+            WORKSPACE_PASSWORD="$WORKSPACE_PASSWORD" npm run workspace-accounts:create
+          fi
           ln -sfn "$RELEASE_DIR" "$APP_DIR/current"
           cd "$APP_DIR/current"
           pm2 delete food-crm-backend || true
