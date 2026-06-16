@@ -156,6 +156,26 @@ export async function completeWriteoffAct(actId: number) {
     }
 
     await withTransaction(async (client) => {
+      const lockedActResult = await client.query<{ completedAt: Date | null }>(
+        `
+          SELECT "completedAt"
+          FROM "WriteoffAct"
+          WHERE "id" = $1
+          FOR UPDATE
+          LIMIT 1
+        `,
+        [actId],
+      );
+      const lockedAct = lockedActResult.rows[0];
+
+      if (!lockedAct) {
+        throw new ValidationError("Акт списания не найден");
+      }
+
+      if (lockedAct.completedAt) {
+        throw new ValidationError("Этот акт списания уже завершён");
+      }
+
       for (const item of itemsResult.rows) {
         const productResult = await client.query<{
           name: string;
@@ -210,7 +230,7 @@ export async function completeWriteoffAct(actId: number) {
         `
           UPDATE "WriteoffAct"
           SET "completedAt" = CURRENT_TIMESTAMP
-          WHERE "id" = $1
+          WHERE "id" = $1 AND "completedAt" IS NULL
         `,
         [actId],
       );

@@ -33,7 +33,7 @@ export async function createApp() {
     origin: backendEnv.corsOrigins,
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["content-type"],
+    allowedHeaders: ["content-type", "authorization"],
   });
 
   registerErrorHandler(app);

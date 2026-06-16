@@ -147,12 +147,13 @@ export async function getOrdersByClientId(clientId: number): Promise<OrderListIt
 export async function updateOrderStatus(
   orderId: number,
   status: OrderStatus,
+  expectedCurrentStatus: OrderStatus,
   actorUserId?: number,
 ): Promise<OrderListItem | null> {
   const updatedOrder = await withTransaction(async (client) => {
-    const currentOrder = await client.query<{ id: number }>(
+    const currentOrder = await client.query<{ id: number; status: OrderStatus }>(
       `
-        SELECT "id"
+        SELECT "id", "status"
         FROM "Order"
         WHERE "id" = $1
         FOR UPDATE
@@ -162,6 +163,10 @@ export async function updateOrderStatus(
 
     if (!currentOrder.rowCount) {
       return null;
+    }
+
+    if (currentOrder.rows[0].status !== expectedCurrentStatus) {
+      throw new ValidationError("Статус заказа уже изменился. Обновите страницу и повторите действие.");
     }
 
     await consumeOrderStockForStatus(client, orderId, status, actorUserId);
