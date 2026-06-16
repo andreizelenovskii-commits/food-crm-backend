@@ -24,7 +24,7 @@ test("product -> tech card -> ingredients -> order consumes stock through the te
         return { rowCount: 0, rows: [] };
       }
 
-      if (text.includes("WITH RECURSIVE card_tree")) {
+      if (text.includes("WITH RECURSIVE") && text.includes("card_tree AS")) {
         return {
           rowCount: 1,
           rows: [
@@ -55,6 +55,12 @@ test("product -> tech card -> ingredients -> order consumes stock through the te
   } as unknown as PoolClient;
 
   await consumeOrderStockForStatus(client, 42, "READY", 7);
+
+  const requirementsQuery = executedQueries.find((query) => query.text.includes("WITH RECURSIVE"));
+  assert.ok(requirementsQuery?.text.includes("card_edges AS"));
+  assert.ok(requirementsQuery);
+  assert.ok(requirementsQuery.text.includes("INNER JOIN card_edges edge"));
+  assert.equal(requirementsQuery.text.includes('FROM card_tree\n        INNER JOIN "TechCardComponent"'), false);
 
   const stockUpdate = executedQueries.find((query) => query.text.includes('UPDATE "Product"'));
   assert.deepEqual(stockUpdate?.values, [10, 1.5]);
