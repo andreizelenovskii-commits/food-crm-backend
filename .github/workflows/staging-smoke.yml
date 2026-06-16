@@ -1,0 +1,344 @@
+name: Staging smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    env:
+      BACKEND_APP_DIR: /home/deploy/apps/food-crm-backend-staging
+      DEPLOY_HOST: 163.5.29.68
+      DEPLOY_USER: deploy
+      DEPLOY_PORT: 22
+
+    steps:
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "${{ secrets.DEPLOY_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Run staging smoke
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          "${SSH[@]}" "BACKEND_APP_DIR='$BACKEND_APP_DIR' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$BACKEND_APP_DIR/current"
+
+          SMOKE_ADMIN_PHONE="+79009999101"
+          SMOKE_PASSWORD="Smoke$(openssl rand -hex 12)Aa1!"
+          ADMIN_PHONE="$SMOKE_ADMIN_PHONE" ADMIN_PASSWORD="$SMOKE_PASSWORD" ADMIN_ROLE="admin" npm run admin:create >/tmp/food-crm-staging-smoke-admin.log
+
+          SMOKE_PASSWORD="$SMOKE_PASSWORD" node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { createHmac } from "node:crypto";
+          import { readFileSync } from "node:fs";
+          import pg from "pg";
+
+          function loadEnv(path) {
+            const content = readFileSync(path, "utf8");
+            for (const line of content.split(/\r?\n/)) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith("#")) continue;
+              const index = trimmed.indexOf("=");
+              if (index === -1) continue;
+              const key = trimmed.slice(0, index);
+              const value = trimmed.slice(index + 1);
+              process.env[key] = value.replace(/^["']|["']$/g, "");
+            }
+          }
+
+          loadEnv(".env");
+
+          const api = "http://127.0.0.1:4100";
+          const web = "http://127.0.0.1:3100";
+          const sessionCookieName = process.env.BACKEND_SESSION_COOKIE_NAME || "food_crm_api_session";
+          const clientCookieName = process.env.BACKEND_CLIENT_SESSION_COOKIE_NAME || "food_crm_client_session";
+          const sessionSecret = process.env.BACKEND_SESSION_SECRET || process.env.SESSION_SECRET;
+          assert.ok(sessionSecret && sessionSecret.length >= 32, "SESSION_SECRET is not strong enough on staging");
+
+          const adminPhone = "79009999101";
+          const adminPassword = process.env.SMOKE_PASSWORD;
+          assert.ok(adminPassword, "Smoke password was not generated");
+
+          async function request(path, options = {}) {
+            const response = await fetch(`${api}${path}`, {
+              ...options,
+              headers: {
+                "content-type": "application/json",
+                ...(options.headers || {}),
+              },
+            });
+            const text = await response.text();
+            let body = null;
+            try {
+              body = text ? JSON.parse(text) : null;
+            } catch {
+              body = { raw: text };
+            }
+            if (!response.ok) {
+              throw new Error(`${path} failed with ${response.status}: ${text.slice(0, 500)}`);
+            }
+            return { response, body };
+          }
+
+          async function requestAllowFailure(path, options = {}) {
+            const response = await fetch(`${api}${path}`, {
+              ...options,
+              headers: {
+                "content-type": "application/json",
+                ...(options.headers || {}),
+              },
+            });
+            const text = await response.text();
+            let body = null;
+            try {
+              body = text ? JSON.parse(text) : null;
+            } catch {
+              body = { raw: text };
+            }
+            return { response, body, text };
+          }
+
+          async function webRequest(path, cookie) {
+            const response = await fetch(`${web}${path}`, {
+              redirect: "manual",
+              headers: cookie ? { cookie } : undefined,
+            });
+            if (response.status >= 400) {
+              throw new Error(`frontend ${path} failed with ${response.status}`);
+            }
+            return response;
+          }
+
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+          async function seedData() {
+            const employee = await pool.query(
+              `
+                INSERT INTO "Employee" ("name", "email", "role", "phone", "messenger")
+                VALUES ('SMOKE Dispatcher', 'smoke-dispatcher@foodlike.local', 'Диспетчер', '+7 900 999 91 11', 'staging smoke')
+                ON CONFLICT ("email")
+                DO UPDATE SET "name" = EXCLUDED."name", "role" = EXCLUDED."role", "phone" = EXCLUDED."phone"
+                RETURNING "id"
+              `,
+            );
+
+            const client = await pool.query(
+              `
+                INSERT INTO "Client" ("name", "type", "email", "phone", "birthDate", "address", "notes")
+                VALUES ('SMOKE Client', 'CLIENT', 'smoke-client@foodlike.local', '+7 900 999 92 02', '1990-01-01', 'г. Smoke, ул. Test, д. 1', 'staging smoke')
+                ON CONFLICT ("phone")
+                DO UPDATE SET "name" = EXCLUDED."name", "type" = EXCLUDED."type", "birthDate" = EXCLUDED."birthDate", "address" = EXCLUDED."address"
+                RETURNING "id"
+              `,
+            );
+
+            const product = await pool.query(
+              `
+                INSERT INTO "Product" ("name", "sku", "category", "unit", "stockQuantity", "priceCents", "description")
+                VALUES ('SMOKE Ingredient', 'SMOKE-STAGING-INGREDIENT', 'Ингредиенты', 'шт', 100, 1000, 'staging smoke')
+                ON CONFLICT ("sku")
+                DO UPDATE SET "stockQuantity" = 100, "priceCents" = 1000
+                RETURNING "id"
+              `,
+            );
+
+            const techCard = await pool.query(
+              `
+                INSERT INTO "TechnologicalCard" ("name", "category", "outputQuantity", "outputUnit", "description")
+                VALUES ('SMOKE Staging Tech Card', 'Пицца', 1, 'шт', 'staging smoke')
+                ON CONFLICT ("name")
+                DO UPDATE SET "category" = EXCLUDED."category", "outputQuantity" = EXCLUDED."outputQuantity", "outputUnit" = EXCLUDED."outputUnit"
+                RETURNING "id"
+              `,
+            );
+
+            await pool.query(`DELETE FROM "TechCardIngredient" WHERE "technologicalCardId" = $1`, [techCard.rows[0].id]);
+            await pool.query(
+              `
+                INSERT INTO "TechCardIngredient" ("technologicalCardId", "productId", "quantity", "unit")
+                VALUES ($1, $2, 1, 'шт')
+              `,
+              [techCard.rows[0].id, product.rows[0].id],
+            );
+
+            const catalog = await pool.query(
+              `
+                INSERT INTO "CatalogItem" (
+                  "name", "slug", "category", "kitchenZone", "kitchenZones", "description",
+                  "imageUrl", "priceCents", "isPublished", "technologicalCardId"
+                )
+                VALUES (
+                  'SMOKE Pizza', 'smoke-staging-item', 'Пицца', 'pizza', ARRAY['pizza'],
+                  'staging smoke', '/icon.png', 45000, true, $1
+                )
+                ON CONFLICT ("slug")
+                DO UPDATE SET
+                  "name" = EXCLUDED."name",
+                  "category" = EXCLUDED."category",
+                  "kitchenZone" = EXCLUDED."kitchenZone",
+                  "kitchenZones" = EXCLUDED."kitchenZones",
+                  "priceCents" = EXCLUDED."priceCents",
+                  "isPublished" = true,
+                  "technologicalCardId" = EXCLUDED."technologicalCardId"
+                RETURNING "id"
+              `,
+              [techCard.rows[0].id],
+            );
+
+            await pool.query(`DELETE FROM "CatalogItemVariant" WHERE "catalogItemId" = $1`, [catalog.rows[0].id]);
+            const variant = await pool.query(
+              `
+                INSERT INTO "CatalogItemVariant" (
+                  "catalogItemId", "technologicalCardId", "label", "priceCents", "isDefault", "displayOrder"
+                )
+                VALUES ($1, $2, 'Стандарт', 45000, true, 0)
+                RETURNING "id"
+              `,
+              [catalog.rows[0].id, techCard.rows[0].id],
+            );
+
+            return {
+              employeeId: employee.rows[0].id,
+              clientId: client.rows[0].id,
+              productId: product.rows[0].id,
+              catalogItemId: catalog.rows[0].id,
+              catalogItemVariantId: variant.rows[0].id,
+            };
+          }
+
+          function createPublicClientCookie(phone) {
+            const expiresAt = Date.now() + 30 * 24 * 60 * 60 * 1000;
+            const encodedPayload = Buffer
+              .from(JSON.stringify({ phone, expiresAt }))
+              .toString("base64url");
+            const signature = createHmac("sha256", sessionSecret)
+              .update(`client:${encodedPayload}`)
+              .digest("hex");
+            return `${clientCookieName}=${encodedPayload}.${signature}`;
+          }
+
+          const data = await seedData();
+
+          await request("/api/v1/health");
+          const login = await request("/api/v1/auth/login", {
+            method: "POST",
+            body: JSON.stringify({ phone: adminPhone, password: adminPassword }),
+          });
+
+          const setCookie = login.response.headers.get("set-cookie") || "";
+          assert.match(setCookie, new RegExp(`${sessionCookieName}=`), "auth login did not set CRM session cookie");
+          assert.match(setCookie, /Max-Age=2592000/i, "CRM session cookie is not 30 days");
+          const token = login.body?.data?.token;
+          assert.ok(token, "auth login did not return bearer token");
+          const crmCookie = `${sessionCookieName}=${token}`;
+          const authHeaders = { authorization: `Bearer ${token}` };
+
+          const me = await request("/api/v1/auth/me", { headers: authHeaders });
+          assert.equal(me.body?.data?.phone, adminPhone, "auth/me returned a different user");
+
+          await webRequest("/api/health");
+          await webRequest("/login");
+          await webRequest("/dashboard/orders", crmCookie);
+
+          await request("/api/v1/orders", { headers: authHeaders });
+          const order = await request("/api/v1/orders", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+              clientId: data.clientId,
+              employeeId: data.employeeId,
+              status: "SENT_TO_KITCHEN",
+              source: "PHONE",
+              deliveryFeeCents: 0,
+              isInternal: false,
+              items: [{
+                catalogItemId: data.catalogItemId,
+                catalogItemVariantId: data.catalogItemVariantId,
+                quantity: 1,
+              }],
+            }),
+          });
+          assert.ok(order.body?.data?.id, "CRM order was not created");
+          await request(`/api/v1/orders/${order.body.data.id}/status`, {
+            method: "PATCH",
+            headers: authHeaders,
+            body: JSON.stringify({ status: "READY" }),
+          });
+
+          const workspace = await request("/api/v1/inventory/workspace", { headers: authHeaders });
+          assert.ok(Array.isArray(workspace.body?.data?.products), "inventory workspace has no products array");
+          const incoming = await request("/api/v1/inventory/incoming-acts", {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+              responsibleEmployeeId: data.employeeId,
+              supplierName: "SMOKE Supplier",
+              notes: "staging smoke",
+              items: [{ productId: data.productId, quantity: 1, price: 10 }],
+            }),
+          });
+          assert.ok(incoming.body?.data?.id, "incoming act was not created");
+          await request(`/api/v1/inventory/incoming-acts/${incoming.body.data.id}/complete`, {
+            method: "POST",
+            headers: authHeaders,
+            body: "{}",
+          });
+          const duplicateComplete = await requestAllowFailure(`/api/v1/inventory/incoming-acts/${incoming.body.data.id}/complete`, {
+            method: "POST",
+            headers: authHeaders,
+            body: "{}",
+          });
+          assert.equal(duplicateComplete.response.status, 400, "duplicate incoming completion must be rejected");
+
+          const publicCatalog = await request("/api/v1/public/catalog");
+          assert.ok(
+            publicCatalog.body?.data?.some((item) => item.id === data.catalogItemId),
+            "public catalog does not expose smoke item",
+          );
+
+          const smsProbe = await requestAllowFailure("/api/v1/public-auth/register/request-code", {
+            method: "POST",
+            body: JSON.stringify({
+              firstName: "Smoke",
+              lastName: "Sms",
+              birthDate: "1990-01-01",
+              phone: "+79009999303",
+            }),
+          });
+          assert.ok(
+            smsProbe.response.ok || smsProbe.body?.error || smsProbe.body?.message,
+            "public SMS request returned an unreadable response",
+          );
+
+          const publicOrder = await request("/api/v1/public/orders", {
+            method: "POST",
+            headers: { cookie: createPublicClientCookie("79009999202") },
+            body: JSON.stringify({
+              deliveryAddress: "г. Smoke, ул. Test, д. 1",
+              recipientPhone: "+79009999202",
+              paymentMethod: "cash",
+              customerComment: "staging smoke",
+              items: [{
+                catalogItemId: data.catalogItemId,
+                catalogItemVariantId: data.catalogItemVariantId,
+                quantity: 1,
+                choices: [],
+              }],
+            }),
+          });
+          assert.ok(publicOrder.body?.data?.id, "public order was not created");
+          await request(`/api/v1/public/orders/${publicOrder.body.data.id}`, {
+            headers: { cookie: createPublicClientCookie("79009999202") },
+          });
+
+          await pool.end();
+          console.log("STAGING_SMOKE_OK auth orders inventory public-flow");
+NODE
+          REMOTE
