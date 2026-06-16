@@ -141,11 +141,28 @@ jobs:
 
             const product = await pool.query(
               `
-                INSERT INTO "Product" ("name", "sku", "category", "unit", "stockQuantity", "priceCents", "description")
-                VALUES ('SMOKE Ingredient', 'SMOKE-STAGING-INGREDIENT', 'Ингредиенты', 'шт', 100, 1000, 'staging smoke')
-                ON CONFLICT ("sku")
-                DO UPDATE SET "stockQuantity" = 100, "priceCents" = 1000
-                RETURNING "id"
+                WITH updated AS (
+                  UPDATE "Product"
+                  SET
+                    "name" = 'SMOKE Ingredient',
+                    "category" = 'Ингредиенты',
+                    "unit" = 'шт',
+                    "stockQuantity" = 100,
+                    "priceCents" = 1000,
+                    "description" = 'staging smoke'
+                  WHERE "sku" = 'SMOKE-STAGING-INGREDIENT'
+                  RETURNING "id"
+                ),
+                inserted AS (
+                  INSERT INTO "Product" ("name", "sku", "category", "unit", "stockQuantity", "priceCents", "description")
+                  SELECT 'SMOKE Ingredient', 'SMOKE-STAGING-INGREDIENT', 'Ингредиенты', 'шт', 100, 1000, 'staging smoke'
+                  WHERE NOT EXISTS (SELECT 1 FROM updated)
+                  RETURNING "id"
+                )
+                SELECT "id" FROM updated
+                UNION ALL
+                SELECT "id" FROM inserted
+                LIMIT 1
               `,
             );
 
