@@ -340,5 +340,5 @@ jobs:
 
           await pool.end();
           console.log("STAGING_SMOKE_OK auth orders inventory public-flow");
-NODE
+          NODE
           REMOTE
