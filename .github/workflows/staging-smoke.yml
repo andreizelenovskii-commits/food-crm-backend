@@ -168,11 +168,26 @@ jobs:
 
             const techCard = await pool.query(
               `
-                INSERT INTO "TechnologicalCard" ("name", "category", "outputQuantity", "outputUnit", "description")
-                VALUES ('SMOKE Staging Tech Card', 'Пицца', 1, 'шт', 'staging smoke')
-                ON CONFLICT ("name")
-                DO UPDATE SET "category" = EXCLUDED."category", "outputQuantity" = EXCLUDED."outputQuantity", "outputUnit" = EXCLUDED."outputUnit"
-                RETURNING "id"
+                WITH updated AS (
+                  UPDATE "TechnologicalCard"
+                  SET
+                    "category" = 'Пицца',
+                    "outputQuantity" = 1,
+                    "outputUnit" = 'шт',
+                    "description" = 'staging smoke'
+                  WHERE "name" = 'SMOKE Staging Tech Card'
+                  RETURNING "id"
+                ),
+                inserted AS (
+                  INSERT INTO "TechnologicalCard" ("name", "category", "outputQuantity", "outputUnit", "description")
+                  SELECT 'SMOKE Staging Tech Card', 'Пицца', 1, 'шт', 'staging smoke'
+                  WHERE NOT EXISTS (SELECT 1 FROM updated)
+                  RETURNING "id"
+                )
+                SELECT "id" FROM updated
+                UNION ALL
+                SELECT "id" FROM inserted
+                LIMIT 1
               `,
             );
 
