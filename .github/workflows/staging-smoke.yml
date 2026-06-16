@@ -29,6 +29,7 @@ jobs:
           "${SSH[@]}" "BACKEND_APP_DIR='$BACKEND_APP_DIR' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$BACKEND_APP_DIR/current"
+          trap 'echo "::group::staging backend logs"; pm2 logs food-crm-backend-staging --lines 160 --nostream || true; echo "::endgroup::"; echo "::group::staging frontend logs"; pm2 logs food-crm-frontend-staging --lines 80 --nostream || true; echo "::endgroup::"' ERR
 
           SMOKE_ADMIN_PHONE="+79009999101"
           SMOKE_PASSWORD="Smoke$(openssl rand -hex 12)Aa1!"
