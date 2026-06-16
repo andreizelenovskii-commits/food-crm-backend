@@ -83,6 +83,12 @@ export type AuthenticatedApiUser = SessionUser & {
 };
 
 const ACCESS_PERMISSION_SET = new Set<string>(ACCESS_PERMISSIONS);
+const ROLE_PERMISSIONS_CACHE_TTL_MS = 30_000;
+
+const rolePermissionsCache = new Map<
+  UserRole,
+  { expiresAt: number; permissions: AccessPermission[] }
+>();
 
 function normalizePermissions(values: unknown[]) {
   const permissions = values.filter((value): value is AccessPermission =>
@@ -113,6 +119,12 @@ export async function getPermissionsForRole(role: unknown) {
     return [];
   }
 
+  const cached = rolePermissionsCache.get(normalizedRole);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.permissions;
+  }
+
   const result = await pool.query<{ permission: string }>(
     `
       SELECT "permission"
@@ -123,11 +135,16 @@ export async function getPermissionsForRole(role: unknown) {
     [normalizedRole],
   ).catch(() => ({ rows: [] as Array<{ permission: string }> }));
 
-  if (result.rows.length === 0) {
-    return getDefaultPermissionsForRole(normalizedRole);
-  }
+  const permissions = result.rows.length === 0
+    ? getDefaultPermissionsForRole(normalizedRole)
+    : normalizePermissions(result.rows.map((row) => row.permission));
 
-  return normalizePermissions(result.rows.map((row) => row.permission));
+  rolePermissionsCache.set(normalizedRole, {
+    expiresAt: Date.now() + ROLE_PERMISSIONS_CACHE_TTL_MS,
+    permissions,
+  });
+
+  return permissions;
 }
 
 export async function getRoleModels() {
@@ -171,6 +188,8 @@ export async function replaceRolePermissions(role: unknown, permissions: unknown
   } finally {
     client.release();
   }
+
+  rolePermissionsCache.delete(normalizedRole);
 
   return {
     role: normalizedRole,

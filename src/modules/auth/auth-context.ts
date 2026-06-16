@@ -78,24 +78,12 @@ function getRequestToken(request: FastifyRequest) {
 }
 
 async function buildAuthUser(payload: {
-  sessionId?: string;
   userId: number;
   phone: string;
   email?: string;
   role: string;
-  issuedAt?: number;
 }): Promise<AuthenticatedApiUser | null> {
   const loginId = payload.phone || payload.email || "";
-
-  if (!payload.sessionId) {
-    return null;
-  }
-
-  const sessionStatus = await findAuthSessionStatus(payload.sessionId, payload.userId);
-
-  if (sessionStatus.status !== "active") {
-    return null;
-  }
 
   const identity = await resolveSessionUserIdentity(payload.userId, {
     phone: loginId,
