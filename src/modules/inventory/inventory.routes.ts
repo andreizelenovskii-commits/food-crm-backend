@@ -25,6 +25,11 @@ import {
   updateProductService,
 } from "@backend/modules/inventory/inventory.service";
 import {
+  fetchTechCardProductOptions,
+  fetchTechCards,
+} from "@backend/modules/tech-cards/tech-cards.service";
+import { fetchEmployees } from "@backend/modules/employees/employees.service";
+import {
   parseCreateIncomingActInput,
   parseCreateInventorySessionInput,
   parseCreateWriteoffActInput,
@@ -89,6 +94,41 @@ function incomingActFormData(body: Record<string, unknown>) {
 }
 
 export async function registerInventoryRoutes(app: FastifyInstance) {
+  app.get("/api/v1/inventory/workspace", { preHandler: requirePermission("view_inventory") }, async () => {
+    const [
+      products,
+      responsibleOptions,
+      incomingActs,
+      inventorySessions,
+      writeoffActs,
+      employees,
+      techCards,
+      techCardProducts,
+    ] = await Promise.all([
+      fetchProducts(),
+      fetchInventoryResponsibleOptions(),
+      fetchIncomingActs(),
+      fetchInventorySessions(),
+      fetchWriteoffActs(),
+      fetchEmployees(),
+      fetchTechCards(),
+      fetchTechCardProductOptions(),
+    ]);
+
+    return {
+      data: {
+        products,
+        responsibleOptions,
+        incomingActs,
+        inventorySessions,
+        writeoffActs,
+        employees,
+        techCards,
+        techCardProducts,
+      },
+    };
+  });
+
   app.get("/api/v1/inventory/products", { preHandler: requirePermission("view_inventory") }, async () => ({
     data: await fetchProducts(),
   }));
