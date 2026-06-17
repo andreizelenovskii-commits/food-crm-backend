@@ -83,6 +83,13 @@ export type AuthenticatedApiUser = SessionUser & {
 };
 
 const ACCESS_PERMISSION_SET = new Set<string>(ACCESS_PERMISSIONS);
+const FULL_ACCESS_ROLES = new Set<UserRole>([
+  "admin",
+  "Администратор",
+  "Шеф повар",
+  "Управляющий",
+  "Старший курьер",
+]);
 const ROLE_PERMISSIONS_CACHE_TTL_MS = 30_000;
 
 const rolePermissionsCache = new Map<
@@ -112,11 +119,21 @@ export function getDefaultPermissionsForRole(role: unknown) {
   return getRoleModel(role)?.permissions ?? [];
 }
 
+export function isFullAccessRole(role: unknown) {
+  const normalizedRole = normalizeUserRole(role);
+
+  return normalizedRole ? FULL_ACCESS_ROLES.has(normalizedRole) : false;
+}
+
 export async function getPermissionsForRole(role: unknown) {
   const normalizedRole = normalizeUserRole(role);
 
   if (!normalizedRole) {
     return [];
+  }
+
+  if (isFullAccessRole(normalizedRole)) {
+    return getDefaultPermissionsForRole(normalizedRole);
   }
 
   const cached = rolePermissionsCache.get(normalizedRole);
@@ -201,9 +218,15 @@ export function hasApiPermission(
   userOrRole: AuthenticatedApiUser | UserRole,
   permission: AccessPermission,
 ) {
+  const rawRole = typeof userOrRole === "string" ? userOrRole : userOrRole.role;
+
+  if (isFullAccessRole(rawRole)) {
+    return getDefaultPermissionsForRole(rawRole).includes(permission);
+  }
+
   if (typeof userOrRole !== "string") {
     return userOrRole.permissions.includes(permission);
   }
 
-  return getDefaultPermissionsForRole(userOrRole).includes(permission);
+  return getDefaultPermissionsForRole(rawRole).includes(permission);
 }

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { authenticateUser, changeUserPassword } from "@backend/modules/auth/auth.service";
 import { AuthenticationError, ValidationError } from "@backend/shared/errors/app-error";
 import { getPermissionsForRole } from "@backend/modules/access/access-control";
@@ -82,8 +82,43 @@ function getSessionCookieDomain(request: { hostname: string; headers: Record<str
   return undefined;
 }
 
+function getKnownEmployeeSessionCookieNames() {
+  return Array.from(new Set([
+    backendEnv.sessionCookieName,
+    "food_crm_api_session",
+    "food_crm_staging_api_session",
+  ]));
+}
+
+function getEmployeeSessionCookieDomains(request: { hostname: string; headers: Record<string, unknown> }) {
+  return Array.from(new Set([
+    undefined,
+    getSessionCookieDomain(request),
+    ".crmandromeda.ru",
+  ]));
+}
+
+function clearEmployeeSessionCookies(
+  request: { hostname: string; headers: Record<string, unknown> },
+  reply: FastifyReply,
+) {
+  for (const name of getKnownEmployeeSessionCookieNames()) {
+    for (const domain of getEmployeeSessionCookieDomains(request)) {
+      reply.clearCookie(name, {
+        domain,
+        path: "/",
+      });
+    }
+  }
+}
+
+function setNoStore(reply: FastifyReply) {
+  reply.header("Cache-Control", "no-store");
+}
+
 export async function registerAuthRoutes(app: FastifyInstance) {
   app.post("/api/v1/auth/login", async (request, reply) => {
+    setNoStore(reply);
     const body = getRequestBody(request);
     const password = getStringBodyField(body, "password");
     const loginRaw = getStringBodyField(body, "phone") || getStringBodyField(body, "email");
@@ -154,6 +189,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       expiresAt,
     });
 
+    clearEmployeeSessionCookies(request, reply);
     reply.setCookie(backendEnv.sessionCookieName, session.token, {
       httpOnly: true,
       sameSite: "lax",
@@ -189,6 +225,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/v1/auth/logout", { preHandler: authenticateRequest }, async (request, reply) => {
+    setNoStore(reply);
     const user = await resolveAuthUser(request);
 
     if (user && request.authSessionId) {
@@ -202,10 +239,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       });
     }
 
-    reply.clearCookie(backendEnv.sessionCookieName, {
-      domain: getSessionCookieDomain(request),
-      path: "/",
-    });
+    clearEmployeeSessionCookies(request, reply);
     return { data: { success: true } };
   });
 
@@ -229,7 +263,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     return { data: { success: true } };
   });
 
-  app.get("/api/v1/auth/me", async (request) => {
+  app.get("/api/v1/auth/me", async (request, reply) => {
+    setNoStore(reply);
     const user = await resolveAuthUser(request);
 
     if (!user) {
@@ -239,6 +274,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         ip: getRequestIp(request.headers, request.ip),
         origin: getRequestOrigin(request.headers),
       });
+      clearEmployeeSessionCookies(request, reply);
       throw new AuthenticationError(authFailureMessage(request.authFailureReason));
     }
 
