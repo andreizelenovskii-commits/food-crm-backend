@@ -4,6 +4,7 @@ import {
   chooseOrderPackaging,
   fetchOrderById,
   fetchOrderCreateOptions,
+  fetchKitchenOrders,
   fetchOrders,
   fetchOrdersByClientId,
   fetchPackagingOptions,
@@ -23,6 +24,7 @@ import {
   canAdvanceOrder,
   canCancelOrder,
   canCreateOrders,
+  canViewKitchenQueue,
   DEFAULT_DELIVERY_FEE_CENTS,
   getNextOrderStatus,
   INITIAL_ORDER_STATUS,
@@ -31,6 +33,7 @@ import { ValidationError } from "@backend/shared/errors/app-error";
 import { authenticateRequest, requirePermission } from "@backend/modules/auth/auth-context";
 import { getNumericParam, getRequestBody, getStringBodyField, toFormData } from "@backend/lib/request";
 import { writeAuditLog } from "@backend/modules/audit/audit-log";
+import { AuthorizationError } from "@backend/lib/http-errors";
 
 export async function registerOrdersRoutes(app: FastifyInstance) {
   app.post("/api/v1/public/orders", async (request) => {
@@ -67,6 +70,18 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
   app.get("/api/v1/orders/options", { preHandler: requirePermission("view_orders") }, async () => ({
     data: await fetchOrderCreateOptions(),
   }));
+
+  app.get("/api/v1/orders/kitchen", { preHandler: requirePermission("view_orders") }, async (request) => {
+    const user = request.authUser;
+
+    if (!user || !canViewKitchenQueue(user.role)) {
+      throw new AuthorizationError("Access denied");
+    }
+
+    return {
+      data: await fetchKitchenOrders(),
+    };
+  });
 
   app.get("/api/v1/orders/packaging-options", { preHandler: requirePermission("view_orders") }, async () => ({
     data: await fetchPackagingOptions(),

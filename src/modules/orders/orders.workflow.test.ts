@@ -4,6 +4,7 @@ import {
   canAdvanceOrder,
   canCancelOrder,
   canCreateOrders,
+  canViewKitchenQueue,
   getOrderStageOwner,
   getNextOrderStatus,
   isOrderClosed,
@@ -55,4 +56,12 @@ test("cancel and creation permissions match business roles", () => {
   assert.equal(canCreateOrders("Курьер"), false);
   assert.equal(isOrderClosed("CANCELLED"), true);
   assert.equal(isOrderClosed("DELIVERED_PAID"), true);
+});
+
+test("kitchen queue access is limited to cooks and managers", () => {
+  assert.equal(canViewKitchenQueue("Повар"), true);
+  assert.equal(canViewKitchenQueue("Шеф повар"), true);
+  assert.equal(canViewKitchenQueue("Администратор"), true);
+  assert.equal(canViewKitchenQueue("Диспетчер"), false);
+  assert.equal(canViewKitchenQueue("Курьер"), false);
 });

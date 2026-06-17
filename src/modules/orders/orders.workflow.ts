@@ -57,6 +57,10 @@ export function canCreateOrders(role: UserRole) {
   return isManagerRole(role) || role === "Диспетчер";
 }
 
+export function canViewKitchenQueue(role: UserRole) {
+  return isManagerRole(role) || role === "Повар";
+}
+
 export function isOrderClosed(status: OrderStatus) {
   return status === FINAL_ORDER_STATUS || status === "CANCELLED";
 }

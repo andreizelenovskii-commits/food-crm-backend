@@ -30,6 +30,7 @@ const PROTECTED_ROUTES: RouteGuardExpectation[] = [
   { file: "src/modules/loyalty/loyalty.routes.ts", route: "/api/v1/loyalty", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders", guard: 'requirePermission("view_orders")' },
   { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders", guard: 'requirePermission("manage_orders")' },
+  { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders/kitchen", guard: 'requirePermission("view_orders")' },
   { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders/:orderId/status", guard: "authenticateRequest" },
   { file: "src/modules/tech-cards/tech-cards.routes.ts", route: "/api/v1/tech-cards", guard: 'requirePermission("view_inventory")' },
   { file: "src/modules/tech-cards/tech-cards.routes.ts", route: "/api/v1/tech-cards", guard: 'requirePermission("manage_inventory")' },
