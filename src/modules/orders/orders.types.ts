@@ -63,6 +63,20 @@ export type OrderItemSummary = {
   packagingUsages: OrderPackagingUsage[];
 };
 
+export type KitchenOrderItemSummary = Pick<
+  OrderItemSummary,
+  | "id"
+  | "catalogItemId"
+  | "catalogItemVariantId"
+  | "itemName"
+  | "quantity"
+  | "catalogCategory"
+  | "kitchenZone"
+  | "kitchenZones"
+  | "excludedIngredients"
+  | "packagingUsages"
+>;
+
 export type OrderListItem = {
   id: number;
   status: OrderStatus;
@@ -81,6 +95,20 @@ export type OrderListItem = {
   totalCents: number;
   createdAt: string;
   items: OrderItemSummary[];
+};
+
+export type KitchenOrderListItem = Pick<
+  OrderListItem,
+  | "id"
+  | "status"
+  | "source"
+  | "isInternal"
+  | "employeeId"
+  | "employeeName"
+  | "customerComment"
+  | "createdAt"
+> & {
+  items: KitchenOrderItemSummary[];
 };
 
 export type OrderCreateInput = {
