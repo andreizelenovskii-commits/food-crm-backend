@@ -165,7 +165,33 @@ async function assertOrderItemsHaveConsumableTechCards(client: PoolClient, order
 async function getIngredientRequirements(client: PoolClient, orderId: number) {
   const result = await client.query<IngredientRequirement>(
     `
-      WITH RECURSIVE card_tree AS (
+      WITH RECURSIVE
+      card_edges AS (
+        SELECT
+          component."technologicalCardId" AS "parentCardId",
+          NULL::integer AS "orderItemId",
+          child."id" AS "childCardId",
+          component."quantity" AS "quantity",
+          child."outputQuantity" AS "outputQuantity"
+        FROM "TechCardComponent" component
+        INNER JOIN "TechnologicalCard" child
+          ON child."id" = component."componentTechnologicalCardId"
+
+        UNION ALL
+
+        SELECT
+          slot."technologicalCardId" AS "parentCardId",
+          choice."orderItemId" AS "orderItemId",
+          selected_child."id" AS "childCardId",
+          choice."quantity" AS "quantity",
+          selected_child."outputQuantity" AS "outputQuantity"
+        FROM "TechCardChoiceSlot" slot
+        INNER JOIN "OrderItemChoice" choice
+          ON choice."choiceSlotId" = slot."id"
+        INNER JOIN "TechnologicalCard" selected_child
+          ON selected_child."id" = choice."selectedTechnologicalCardId"
+      ),
+      card_tree AS (
         SELECT
           tc."id" AS "cardId",
           oi."id" AS "orderItemId",
@@ -175,33 +201,15 @@ async function getIngredientRequirements(client: PoolClient, orderId: number) {
         LEFT JOIN "CatalogItemVariant" v ON v."id" = oi."catalogItemVariantId"
         INNER JOIN "TechnologicalCard" tc ON tc."id" = COALESCE(v."technologicalCardId", ci."technologicalCardId")
         WHERE oi."orderId" = $1
-
         UNION ALL
-
         SELECT
-          child."id" AS "cardId",
+          edge."childCardId",
           card_tree."orderItemId",
-          card_tree."multiplier" * component."quantity" / NULLIF(child."outputQuantity", 0)
+          card_tree."multiplier" * edge."quantity" / NULLIF(edge."outputQuantity", 0)
         FROM card_tree
-        INNER JOIN "TechCardComponent" component
-          ON component."technologicalCardId" = card_tree."cardId"
-        INNER JOIN "TechnologicalCard" child
-          ON child."id" = component."componentTechnologicalCardId"
-
-        UNION ALL
-
-        SELECT
-          selected_child."id" AS "cardId",
-          card_tree."orderItemId",
-          card_tree."multiplier" * choice."quantity" / NULLIF(selected_child."outputQuantity", 0)
-        FROM card_tree
-        INNER JOIN "TechCardChoiceSlot" slot
-          ON slot."technologicalCardId" = card_tree."cardId"
-        INNER JOIN "OrderItemChoice" choice
-          ON choice."orderItemId" = card_tree."orderItemId"
-          AND choice."choiceSlotId" = slot."id"
-        INNER JOIN "TechnologicalCard" selected_child
-          ON selected_child."id" = choice."selectedTechnologicalCardId"
+        INNER JOIN card_edges edge
+          ON edge."parentCardId" = card_tree."cardId"
+          AND (edge."orderItemId" IS NULL OR edge."orderItemId" = card_tree."orderItemId")
       )
       SELECT
         p."id" AS "productId",

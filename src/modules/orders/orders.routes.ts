@@ -146,7 +146,7 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
       throw new ValidationError("У вашей роли нет права перевести заказ в этот статус");
     }
 
-    const updatedOrder = await updateOrderStatusById(orderId, nextStatus as OrderStatus, user.id);
+    const updatedOrder = await updateOrderStatusById(orderId, nextStatus as OrderStatus, order.status, user.id);
     await writeAuditLog({
       request,
       action: nextStatus === "CANCELLED" ? "order.cancel" : "order.status.change",

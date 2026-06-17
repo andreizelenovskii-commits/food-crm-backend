@@ -49,9 +49,10 @@ export async function fetchOrderById(orderId: number) {
 export async function updateOrderStatusById(
   orderId: number,
   status: OrderStatus,
+  expectedCurrentStatus: OrderStatus,
   actorUserId?: number,
 ) {
-  return updateOrderStatus(orderId, status, actorUserId);
+  return updateOrderStatus(orderId, status, expectedCurrentStatus, actorUserId);
 }
 
 export async function fetchPackagingOptions() {

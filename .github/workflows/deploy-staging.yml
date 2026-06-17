@@ -90,6 +90,7 @@ jobs:
             echo "ERROR: не удалось получить URL для food_crm_staging из prod DATABASE_URL."
             exit 1
           fi
+          STAGING_MAINTENANCE_URL="$(printf '%s' "$PROD_DATABASE_URL" | sed -E 's#(^.*)/([^/?]+)(\?.*)?$#\1/postgres\3#')"
 
           grep -v -E '^(DATABASE_URL|PORT|BACKEND_CORS_ORIGIN|BACKEND_SESSION_COOKIE_DOMAIN|BACKEND_SESSION_COOKIE_NAME)=' "$APP_DIR/shared/.env" > "$APP_DIR/shared/.env.tmp" || true
           mv "$APP_DIR/shared/.env.tmp" "$APP_DIR/shared/.env"
@@ -111,17 +112,33 @@ jobs:
             echo "BACKEND_SESSION_COOKIE_NAME=food_crm_staging_api_session"
           } >> "$APP_DIR/shared/.env"
           ln -sfn "$APP_DIR/shared/.env" "$RELEASE_DIR/.env"
-          sudo -n -u postgres psql -v ON_ERROR_STOP=1 -d postgres <<'SQL'
+          if sudo -n true 2>/dev/null; then
+            sudo -n -u postgres psql -v ON_ERROR_STOP=1 -d postgres <<'SQL'
           SELECT 'CREATE DATABASE food_crm_staging OWNER food_crm_user'
           WHERE NOT EXISTS (
             SELECT FROM pg_database WHERE datname = 'food_crm_staging'
           )\gexec
           ALTER DATABASE food_crm_staging OWNER TO food_crm_user;
           SQL
-          sudo -n -u postgres psql -v ON_ERROR_STOP=1 -d food_crm_staging <<'SQL'
+            sudo -n -u postgres psql -v ON_ERROR_STOP=1 -d food_crm_staging <<'SQL'
           ALTER SCHEMA public OWNER TO food_crm_user;
           GRANT ALL ON SCHEMA public TO food_crm_user;
           SQL
+          else
+            echo "WARN: passwordless sudo недоступен; пробую подготовить staging DB через app user."
+            if ! psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+              psql "$STAGING_MAINTENANCE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          SELECT 'CREATE DATABASE food_crm_staging OWNER food_crm_user'
+          WHERE NOT EXISTS (
+            SELECT FROM pg_database WHERE datname = 'food_crm_staging'
+          )\gexec
+          SQL
+            fi
+            if ! psql "$STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null; then
+              echo "ERROR: staging DB food_crm_staging недоступна. Настройте passwordless sudo, выдайте food_crm_user CREATEDB или создайте базу один раз вручную."
+              exit 1
+            fi
+          fi
           REMOTE
 
       - name: Install release dependencies
