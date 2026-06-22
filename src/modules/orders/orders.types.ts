@@ -1,4 +1,5 @@
 export type OrderStatus =
+  | "NEW"
   | "SENT_TO_KITCHEN"
   | "READY"
   | "PACKED"
@@ -6,6 +7,7 @@ export type OrderStatus =
   | "CANCELLED";
 
 export const ORDER_STATUSES = [
+  "NEW",
   "SENT_TO_KITCHEN",
   "READY",
   "PACKED",
@@ -80,6 +82,7 @@ export type KitchenOrderItemSummary = Pick<
 export type OrderListItem = {
   id: number;
   status: OrderStatus;
+  shiftId: number | null;
   source: OrderSource;
   isInternal: boolean;
   clientId: number | null;
@@ -116,6 +119,7 @@ export type OrderCreateInput = {
   employeeId: number;
   isInternal: boolean;
   status: OrderStatus;
+  shiftId?: number | null;
   deliveryFeeCents: number;
   source?: OrderSource;
   customerPhoneSnapshot?: string | null;

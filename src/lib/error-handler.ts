@@ -27,6 +27,10 @@ function getStatusCode(error: Error) {
 }
 
 function getErrorCode(error: Error) {
+  if ("code" in error && typeof error.code === "string" && error.code) {
+    return error.code;
+  }
+
   if (error instanceof ValidationError) {
     return "VALIDATION_ERROR";
   }
@@ -46,6 +50,10 @@ function getErrorCode(error: Error) {
   return "INTERNAL_ERROR";
 }
 
+function getErrorDetails(error: Error) {
+  return "details" in error && error.details !== undefined ? error.details : undefined;
+}
+
 function toError(value: unknown) {
   return value instanceof Error ? value : new Error(String(value));
 }
@@ -56,10 +64,13 @@ export function registerErrorHandler(app: FastifyInstance) {
     const normalizedError = toError(error);
     const statusCode = getStatusCode(normalizedError);
 
+    const details = getErrorDetails(normalizedError);
+
     reply.status(statusCode).send({
       error: {
         code: getErrorCode(normalizedError),
         message: statusCode >= 500 ? "Internal server error" : normalizedError.message,
+        ...(details === undefined ? {} : { details }),
       },
     });
   });

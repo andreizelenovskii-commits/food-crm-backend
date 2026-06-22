@@ -48,6 +48,7 @@ export async function getOrderById(orderId: number): Promise<OrderListItem | nul
       SELECT
         o."id",
         o."status",
+        o."shiftId",
         o."source",
         o."isInternal",
         o."customerPhoneSnapshot",
@@ -84,6 +85,7 @@ export async function getOrders(): Promise<OrderListItem[]> {
       SELECT
         o."id",
         o."status",
+        o."shiftId",
         o."source",
         o."isInternal",
         o."customerPhoneSnapshot",
@@ -118,6 +120,7 @@ export async function getOrdersByClientId(clientId: number): Promise<OrderListIt
       SELECT
         o."id",
         o."status",
+        o."shiftId",
         o."source",
         o."isInternal",
         o."customerPhoneSnapshot",
@@ -151,12 +154,13 @@ export async function updateOrderStatus(
   actorUserId?: number,
 ): Promise<OrderListItem | null> {
   const updatedOrder = await withTransaction(async (client) => {
-    const currentOrder = await client.query<{ id: number; status: OrderStatus }>(
+    const currentOrder = await client.query<{ id: number; status: OrderStatus; shiftStatus: string | null }>(
       `
-        SELECT "id", "status"
-        FROM "Order"
-        WHERE "id" = $1
-        FOR UPDATE
+        SELECT o."id", o."status", s."status" AS "shiftStatus"
+        FROM "Order" o
+        LEFT JOIN "DispatcherShift" s ON s."id" = o."shiftId"
+        WHERE o."id" = $1
+        FOR UPDATE OF o
       `,
       [orderId],
     );
@@ -169,6 +173,10 @@ export async function updateOrderStatus(
       throw new ValidationError("Статус заказа уже изменился. Обновите страницу и повторите действие.");
     }
 
+    if (currentOrder.rows[0].shiftStatus === "CLOSED") {
+      throw new ValidationError("Заказы закрытой смены больше нельзя изменять");
+    }
+
     await consumeOrderStockForStatus(client, orderId, status, actorUserId);
 
     const result = await client.query<OrderRow>(
@@ -179,6 +187,7 @@ export async function updateOrderStatus(
         RETURNING
           o."id",
           o."status",
+          o."shiftId",
           o."source",
           o."isInternal",
           o."customerPhoneSnapshot",
@@ -244,9 +253,12 @@ export async function addOrderPackagingUsage({
           ci."kitchenZone",
           COALESCE(ci."kitchenZones", ARRAY[]::text[]) AS "kitchenZones"
         FROM "OrderItem" oi
+        INNER JOIN "Order" o ON o."id" = oi."orderId"
+        LEFT JOIN "DispatcherShift" s ON s."id" = o."shiftId"
         LEFT JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
         WHERE oi."id" = $1 AND oi."orderId" = $2
-        FOR UPDATE
+          AND COALESCE(s."status", 'OPEN') <> 'CLOSED'
+        FOR UPDATE OF oi
       `,
       [orderItemId, orderId],
     );
@@ -254,7 +266,7 @@ export async function addOrderPackagingUsage({
     const item = itemResult.rows[0];
 
     if (!item) {
-      throw new ValidationError("Позиция заказа не найдена");
+      throw new ValidationError("Позиция заказа не найдена или смена уже закрыта");
     }
 
     const allowedKitchenZones = normalizeOrderItemKitchenZones(item.kitchenZones, item.kitchenZone, item.catalogCategory);
@@ -434,7 +446,7 @@ async function upsertPackagingMovement(
   );
 }
 
-async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListItem[]> {
+export async function attachItemsToOrders(orders: OrderListItem[]): Promise<OrderListItem[]> {
   if (!orders.length) {
     return orders;
   }

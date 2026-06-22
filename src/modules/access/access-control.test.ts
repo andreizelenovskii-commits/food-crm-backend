@@ -14,6 +14,9 @@ test("admin and manager have full operational permissions", () => {
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Шеф повар", permissions: ["manage_inventory"] }, "manage_inventory"), true);
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Управляющий", permissions: ["manage_inventory", "manage_orders"] }, "manage_inventory"), true);
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Управляющий", permissions: ["manage_inventory", "manage_orders"] }, "manage_orders"), true);
+  assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Управляющий", permissions: [] }, "manage_dispatcher_shift"), true);
+  assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Управляющий", permissions: [] }, "cancel_orders"), true);
+  assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Управляющий", permissions: [] }, "delete_orders"), true);
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Старший курьер", permissions: ["manage_orders"] }, "manage_orders"), true);
 });
 
@@ -28,6 +31,8 @@ test("full access roles are not narrowed by stale or incomplete permission array
   assert.equal(hasApiPermission(manager, "manage_clients"), true);
   assert.equal(hasApiPermission(manager, "view_orders"), true);
   assert.equal(hasApiPermission(manager, "manage_orders"), true);
+  assert.equal(hasApiPermission(manager, "view_dispatcher_shifts"), true);
+  assert.equal(hasApiPermission(manager, "manage_dispatcher_shift"), true);
 });
 
 test("getPermissionsForRole returns the full built-in set for manager", async () => {
@@ -39,10 +44,13 @@ test("dispatcher can manage orders but cannot manage inventory", () => {
     "view_dashboard",
     "view_orders",
     "manage_orders",
+    "manage_dispatcher_shift",
     "view_catalog",
     "view_clients",
   ]);
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Диспетчер", permissions: ["manage_orders"] }, "manage_orders"), true);
+  assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Диспетчер", permissions: ["manage_orders"] }, "cancel_orders"), false);
+  assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Диспетчер", permissions: ["manage_orders"] }, "delete_orders"), false);
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Диспетчер", permissions: ["manage_orders"] }, "manage_inventory"), false);
   assert.equal(hasApiPermission({ id: 1, phone: "7", role: "Диспетчер", permissions: ["manage_orders"] }, "view_inventory"), false);
 });

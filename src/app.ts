@@ -15,6 +15,7 @@ import { registerTechCardRoutes } from "@backend/modules/tech-cards/tech-cards.r
 import { registerLoyaltyRoutes } from "@backend/modules/loyalty/loyalty.routes";
 import { registerAccessRoutes } from "@backend/modules/access/access.routes";
 import { registerSalesAnalyticsRoutes } from "@backend/modules/sales-analytics/sales-analytics.routes";
+import { registerDispatcherShiftRoutes } from "@backend/modules/dispatcher-shifts/dispatcher-shifts.routes";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -53,6 +54,7 @@ export async function createApp() {
   await registerAccessRoutes(app);
   await registerDashboardRoutes(app);
   await registerSalesAnalyticsRoutes(app);
+  await registerDispatcherShiftRoutes(app);
   await registerLoyaltyRoutes(app);
   await registerClientsRoutes(app);
   await registerEmployeesRoutes(app);

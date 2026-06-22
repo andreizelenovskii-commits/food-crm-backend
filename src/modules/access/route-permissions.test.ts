@@ -33,6 +33,10 @@ const PROTECTED_ROUTES: RouteGuardExpectation[] = [
   { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders", guard: 'requirePermission("manage_orders")' },
   { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders/kitchen", guard: 'requirePermission("view_orders")' },
   { file: "src/modules/orders/orders.routes.ts", route: "/api/v1/orders/:orderId/status", guard: "authenticateRequest" },
+  { file: "src/modules/dispatcher-shifts/dispatcher-shifts.routes.ts", route: "/api/v1/dispatcher/workspace", guard: "authenticateRequest" },
+  { file: "src/modules/dispatcher-shifts/dispatcher-shifts.routes.ts", route: "/api/v1/dispatcher-shifts/open", guard: 'requirePermission("manage_dispatcher_shift")' },
+  { file: "src/modules/dispatcher-shifts/dispatcher-shifts.routes.ts", route: "/api/v1/dispatcher-shifts/:shiftId/close", guard: 'requirePermission("manage_dispatcher_shift")' },
+  { file: "src/modules/dispatcher-shifts/dispatcher-shifts.routes.ts", route: "/api/v1/dispatcher-shifts", guard: 'requirePermission("view_dispatcher_shifts")' },
   { file: "src/modules/tech-cards/tech-cards.routes.ts", route: "/api/v1/tech-cards", guard: 'requirePermission("view_inventory")' },
   { file: "src/modules/tech-cards/tech-cards.routes.ts", route: "/api/v1/tech-cards", guard: 'requirePermission("manage_inventory")' },
 ];

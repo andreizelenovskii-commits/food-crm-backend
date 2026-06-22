@@ -1,11 +1,14 @@
 import type { UserRole } from "@backend/modules/auth/auth.types";
 import type { OrderStatus } from "@backend/modules/orders/orders.types";
 
-export const INITIAL_ORDER_STATUS: OrderStatus = "SENT_TO_KITCHEN";
+export const INITIAL_ORDER_STATUS: OrderStatus = "NEW";
 export const FINAL_ORDER_STATUS: OrderStatus = "DELIVERED_PAID";
 export const DEFAULT_DELIVERY_FEE_CENTS = 17000;
+export const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["NEW", "SENT_TO_KITCHEN", "READY", "PACKED"];
+export const COMPLETED_ORDER_STATUSES: OrderStatus[] = ["DELIVERED_PAID", "CANCELLED"];
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  NEW: "Новый",
   SENT_TO_KITCHEN: "Передан на кухню",
   READY: "Готов",
   PACKED: "Собран",
@@ -14,6 +17,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 export const ORDER_STATUS_STYLES: Record<OrderStatus, string> = {
+  NEW: "bg-red-100 text-red-800",
   SENT_TO_KITCHEN: "bg-amber-100 text-amber-800",
   READY: "bg-sky-100 text-sky-800",
   PACKED: "bg-violet-100 text-violet-800",
@@ -22,18 +26,21 @@ export const ORDER_STATUS_STYLES: Record<OrderStatus, string> = {
 };
 
 const STATUS_OWNER_BY_STAGE: Partial<Record<OrderStatus, UserRole>> = {
+  NEW: "Диспетчер",
   SENT_TO_KITCHEN: "Повар",
   READY: "Диспетчер",
   PACKED: "Курьер",
 };
 
 const NEXT_STATUS_BY_STAGE: Partial<Record<OrderStatus, OrderStatus>> = {
+  NEW: "SENT_TO_KITCHEN",
   SENT_TO_KITCHEN: "READY",
   READY: "PACKED",
   PACKED: "DELIVERED_PAID",
 };
 
 const NEXT_ACTION_LABELS: Partial<Record<OrderStatus, string>> = {
+  NEW: "Отправить на кухню",
   SENT_TO_KITCHEN: "Заказ готов",
   READY: "Заказ собран",
   PACKED: "Заказ отвезён и оплачен",
@@ -62,7 +69,7 @@ export function canViewKitchenQueue(role: UserRole) {
 }
 
 export function isOrderClosed(status: OrderStatus) {
-  return status === FINAL_ORDER_STATUS || status === "CANCELLED";
+  return COMPLETED_ORDER_STATUSES.includes(status);
 }
 
 export function getOrderStageOwner(status: OrderStatus) {
