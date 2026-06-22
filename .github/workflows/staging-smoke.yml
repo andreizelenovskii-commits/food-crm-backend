@@ -327,7 +327,7 @@ jobs:
                 SELECT "id", "status"
                 FROM "Order"
                 WHERE "shiftId" = $1
-                  AND "customerComment" LIKE 'staging smoke%'
+                  AND "customerComment" LIKE '%staging smoke%'
                   AND "status" IN ('NEW', 'SENT_TO_KITCHEN', 'READY', 'PACKED')
                 ORDER BY "id" ASC
               `,
