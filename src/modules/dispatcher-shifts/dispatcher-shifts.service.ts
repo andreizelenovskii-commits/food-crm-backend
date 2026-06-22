@@ -7,6 +7,7 @@ import {
   closeShift,
   createShift,
   getOpenShift,
+  getShiftById,
   getShiftByBusinessDate,
   getShiftOrders,
   listShifts,
@@ -153,6 +154,10 @@ export async function closeDispatcherShift(input: {
 }
 
 export async function getDispatcherWorkspace(user: AuthenticatedApiUser, clock: Clock = systemClock): Promise<DispatcherWorkspaceDto> {
+  if (!hasApiPermission(user, "manage_dispatcher_shift") && !hasApiPermission(user, "view_dispatcher_shifts")) {
+    throw new ValidationError("У вашей роли нет доступа к диспетчерской");
+  }
+
   const now = clock.now();
   const businessDate = getBusinessDate(now, BUSINESS_TIME_ZONE);
   const openAvailableAt = getOpenThreshold(now, BUSINESS_TIME_ZONE);
@@ -226,6 +231,21 @@ export async function getDispatcherShiftHistory(user: AuthenticatedApiUser, limi
   assertPermission(user, "view_dispatcher_shifts");
 
   return listShifts({ limit: Math.min(Math.max(limit, 1), 100) });
+}
+
+export async function getDispatcherShiftDetail(user: AuthenticatedApiUser, shiftId: number) {
+  assertPermission(user, "view_dispatcher_shifts");
+
+  const shift = await getShiftById(shiftId);
+
+  if (!shift) {
+    throw new ValidationError("Смена не найдена");
+  }
+
+  return {
+    ...shift,
+    orders: await getShiftOrders(shift.id),
+  };
 }
 
 export function getShiftDisplayNumber(number: number) {

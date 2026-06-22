@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { authenticateRequest, requirePermission } from "@backend/modules/auth/auth-context";
 import {
   closeDispatcherShift,
+  getDispatcherShiftDetail,
   getDispatcherShiftHistory,
   getDispatcherWorkspace,
   getPublicOrderingStatus,
@@ -12,17 +13,25 @@ import { getNumericParam, getRequestBody } from "@backend/lib/request";
 import { writeAuditLog } from "@backend/modules/audit/audit-log";
 import { ValidationError } from "@backend/shared/errors/app-error";
 
-export async function registerDispatcherShiftRoutes(app: FastifyInstance) {
-  app.get("/api/v1/public/ordering-status", async () => ({
-    data: await getPublicOrderingStatus(),
-  }));
+const NO_STORE_HEADER = "no-store";
 
-  app.get("/api/v1/dispatcher/workspace", { preHandler: authenticateRequest }, async (request) => {
+export async function registerDispatcherShiftRoutes(app: FastifyInstance) {
+  app.get("/api/v1/public/ordering-status", async (_request, reply) => {
+    reply.header("Cache-Control", NO_STORE_HEADER);
+
+    return {
+      data: await getPublicOrderingStatus(),
+    };
+  });
+
+  app.get("/api/v1/dispatcher/workspace", { preHandler: requirePermission("manage_dispatcher_shift") }, async (request, reply) => {
     const user = request.authUser;
 
     if (!user) {
       throw new ValidationError("Пользователь не найден");
     }
+
+    reply.header("Cache-Control", NO_STORE_HEADER);
 
     return {
       data: await getDispatcherWorkspace(user),
@@ -81,7 +90,7 @@ export async function registerDispatcherShiftRoutes(app: FastifyInstance) {
     return { data: shift };
   });
 
-  app.get("/api/v1/dispatcher-shifts", { preHandler: requirePermission("view_dispatcher_shifts") }, async (request) => {
+  app.get("/api/v1/dispatcher-shifts", { preHandler: requirePermission("view_dispatcher_shifts") }, async (request, reply) => {
     const user = request.authUser;
     const query = request.query && typeof request.query === "object" ? request.query as { limit?: string } : {};
     const limit = Number(query.limit ?? 30);
@@ -90,8 +99,24 @@ export async function registerDispatcherShiftRoutes(app: FastifyInstance) {
       throw new ValidationError("Пользователь не найден");
     }
 
+    reply.header("Cache-Control", NO_STORE_HEADER);
+
     return {
       data: await getDispatcherShiftHistory(user, Number.isInteger(limit) ? limit : 30),
+    };
+  });
+
+  app.get("/api/v1/dispatcher-shifts/:shiftId", { preHandler: requirePermission("view_dispatcher_shifts") }, async (request, reply) => {
+    const user = request.authUser;
+
+    if (!user) {
+      throw new ValidationError("Пользователь не найден");
+    }
+
+    reply.header("Cache-Control", NO_STORE_HEADER);
+
+    return {
+      data: await getDispatcherShiftDetail(user, getNumericParam(request, "shiftId")),
     };
   });
 }
