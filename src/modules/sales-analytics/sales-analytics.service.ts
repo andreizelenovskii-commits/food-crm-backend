@@ -240,6 +240,8 @@ export async function getSalesAnalytics({
       ? {
         durationMs: Math.round(performance.now() - startedAt),
         rows: data.rows,
+        dbDurationMs: data.timings.reduce((total, timing) => total + timing.durationMs, 0),
+        queryTimings: data.timings,
       }
       : undefined,
   };

@@ -59,5 +59,11 @@ export type SalesAnalyticsDto = {
   diagnostics?: {
     durationMs: number;
     rows: Record<string, number>;
+    dbDurationMs: number;
+    queryTimings: Array<{
+      name: string;
+      durationMs: number;
+      rows: number;
+    }>;
   };
 };

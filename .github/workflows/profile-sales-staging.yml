@@ -1,0 +1,139 @@
+name: Profile sales analytics staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      period:
+        description: Sales analytics period
+        required: false
+        default: month
+        type: choice
+        options:
+          - day
+          - week
+          - month
+          - year
+      date:
+        description: Selected date, YYYY-MM-DD
+        required: false
+        default: "2026-06-18"
+      runs:
+        description: Endpoint timing runs, max 5
+        required: false
+        default: "3"
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_DIR: /home/deploy/apps/food-crm-backend-staging
+      DEPLOY_HOST: 163.5.29.68
+      DEPLOY_USER: deploy
+      DEPLOY_PORT: 22
+
+    steps:
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s' "${{ secrets.DEPLOY_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Run staging sales profile
+        env:
+          PROFILE_PERIOD: ${{ inputs.period }}
+          PROFILE_DATE: ${{ inputs.date }}
+          PROFILE_RUNS: ${{ inputs.runs }}
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "$DEPLOY_USER@$DEPLOY_HOST")
+          SUMMARY_FILE="$(mktemp)"
+          "${SSH[@]}" "APP_DIR='$APP_DIR' PROFILE_PERIOD='$PROFILE_PERIOD' PROFILE_DATE='$PROFILE_DATE' PROFILE_RUNS='$PROFILE_RUNS' bash -s" > "$SUMMARY_FILE" <<'REMOTE'
+          set -euo pipefail
+
+          cd "$APP_DIR/current"
+          ENV_FILE="$APP_DIR/shared/.env"
+          COOKIE_JAR="$(mktemp)"
+          LOGIN_BODY="$(mktemp)"
+          PROFILE_BODY="$(mktemp)"
+          PROFILE_HEADERS="$(mktemp)"
+          ORIGINAL_ENV="$(mktemp)"
+          cp "$ENV_FILE" "$ORIGINAL_ENV"
+
+          cleanup() {
+            rm -f "$COOKIE_JAR" "$LOGIN_BODY" "$PROFILE_BODY" "$PROFILE_HEADERS"
+            cp "$ORIGINAL_ENV" "$ENV_FILE"
+            rm -f "$ORIGINAL_ENV"
+            pm2 restart food-crm-backend-staging --update-env >/dev/null || true
+          }
+          trap cleanup EXIT
+
+          grep -v -E '^PERF_DEBUG=' "$ENV_FILE" > "$ENV_FILE.profile.tmp" || true
+          {
+            cat "$ENV_FILE.profile.tmp"
+            echo "PERF_DEBUG=true"
+          } > "$ENV_FILE"
+          rm -f "$ENV_FILE.profile.tmp"
+          chmod 600 "$ENV_FILE"
+          pm2 restart food-crm-backend-staging --update-env >/dev/null
+          sleep 4
+
+          curl -fsS http://127.0.0.1:4100/api/v1/health >/dev/null
+
+          SMOKE_ADMIN_PHONE="+79009999301"
+          SMOKE_PASSWORD="Profile$(openssl rand -hex 12)Aa1!"
+          ADMIN_PHONE="$SMOKE_ADMIN_PHONE" ADMIN_PASSWORD="$SMOKE_PASSWORD" ADMIN_ROLE="admin" npm run admin:create >/tmp/food-crm-staging-sales-profile-admin.log
+
+          ADMIN_PHONE="79009999301"
+          LOGIN_STATUS="$(
+            curl -sS -o "$LOGIN_BODY" -c "$COOKIE_JAR" -w '%{http_code}' \
+              -H 'content-type: application/json' \
+              --data "{\"phone\":\"$ADMIN_PHONE\",\"password\":\"$SMOKE_PASSWORD\"}" \
+              http://127.0.0.1:4100/api/v1/auth/login
+          )"
+          test "$LOGIN_STATUS" = "200"
+          TOKEN="$(jq -r '.data.token // empty' "$LOGIN_BODY")"
+          test -n "$TOKEN"
+
+          RUNS="${PROFILE_RUNS:-3}"
+          case "$RUNS" in
+            ''|*[!0-9]*) RUNS=3 ;;
+          esac
+          if [ "$RUNS" -lt 1 ]; then RUNS=1; fi
+          if [ "$RUNS" -gt 5 ]; then RUNS=5; fi
+
+          echo "# Staging Sales Analytics Endpoint"
+          echo
+          echo "| run | status | ttfb_ms | total_ms | bytes | server_timing |"
+          echo "| --- | ---: | ---: | ---: | ---: | --- |"
+
+          for run in $(seq 1 "$RUNS"); do
+            METRICS="$(
+              curl -sS -o "$PROFILE_BODY" -D "$PROFILE_HEADERS" -b "$COOKIE_JAR" \
+                -H "authorization: Bearer $TOKEN" \
+                -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' \
+                "http://127.0.0.1:4100/api/v1/analytics/sales?period=${PROFILE_PERIOD:-month}&date=${PROFILE_DATE:-2026-06-18}"
+            )"
+            STATUS="$(printf '%s' "$METRICS" | awk '{print $1}')"
+            TTFB_MS="$(printf '%s' "$METRICS" | awk '{printf "%.0f", $2 * 1000}')"
+            TOTAL_MS="$(printf '%s' "$METRICS" | awk '{printf "%.0f", $3 * 1000}')"
+            BYTES="$(printf '%s' "$METRICS" | awk '{print $4}')"
+            SERVER_TIMING="$(awk 'BEGIN{IGNORECASE=1} /^server-timing:/ {sub(/^[^:]+:[[:space:]]*/, ""); gsub(/\r/, ""); print; exit}' "$PROFILE_HEADERS")"
+
+            test "$STATUS" = "200"
+            jq -e '.data.range.period and (.data.kpis | type == "array") and (.data.periodOptions | type == "array")' "$PROFILE_BODY" >/dev/null
+
+            echo "| $run | $STATUS | $TTFB_MS | $TOTAL_MS | $BYTES | \`$SERVER_TIMING\` |"
+          done
+
+          echo
+          echo "# Staging Sales Analytics SQL EXPLAIN"
+          echo
+          npm run profile:sales-analytics -- --period="${PROFILE_PERIOD:-month}" --date="${PROFILE_DATE:-2026-06-18}" --explain=true
+          REMOTE
+
+          cat "$SUMMARY_FILE"
+          cat "$SUMMARY_FILE" >> "$GITHUB_STEP_SUMMARY"
+          rm -f "$SUMMARY_FILE"

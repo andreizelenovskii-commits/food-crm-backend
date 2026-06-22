@@ -50,3 +50,25 @@ test("sales analytics repository uses range-filtered SQL and does not call unbou
   assert.match(routes, /requirePermission\("view_dashboard"\)/);
   assert.match(routes, /\/api\/v1\/analytics\/sales/);
 });
+
+test("sales analytics profiling is gated and safe for staging", () => {
+  const repository = readFileSync(resolve("src/modules/sales-analytics/sales-analytics.repository.ts"), "utf8");
+  const service = readFileSync(resolve("src/modules/sales-analytics/sales-analytics.service.ts"), "utf8");
+  const routes = readFileSync(resolve("src/modules/sales-analytics/sales-analytics.routes.ts"), "utf8");
+  const script = readFileSync(resolve("scripts/profile-sales-analytics.ts"), "utf8");
+  const workflow = readFileSync(resolve(".github/workflows/profile-sales-staging.yml"), "utf8");
+
+  assert.match(repository, /salesAnalyticsQueryDefinitions/);
+  assert.match(service, /process\.env\.PERF_DEBUG === "true"/);
+  assert.match(routes, /Server-Timing/);
+  assert.match(routes, /X-Response-Size/);
+  assert.match(script, /BEGIN READ ONLY/);
+  assert.match(script, /SET LOCAL statement_timeout = '15000ms'/);
+  assert.match(script, /SET LOCAL lock_timeout = '3000ms'/);
+  assert.match(script, /ROLLBACK/);
+  assert.doesNotMatch(script, /\bCREATE\s+INDEX\b/i);
+  assert.match(workflow, /workflow_dispatch/);
+  assert.doesNotMatch(workflow, /push:/);
+  assert.match(workflow, /http:\/\/127\.0\.0\.1:4100\/api\/v1\/analytics\/sales/);
+  assert.doesNotMatch(workflow, /https:\/\/api\.crmandromeda\.ru/);
+});
