@@ -269,6 +269,10 @@ jobs:
             return orderIds(orders).includes(orderId);
           }
 
+          function isSmokeOrder(order) {
+            return typeof order?.customerComment === "string" && order.customerComment.startsWith("staging smoke");
+          }
+
           function errorCode(result) {
             return result.body?.error?.code || null;
           }
@@ -306,6 +310,19 @@ jobs:
               headers: authHeaders,
               body: JSON.stringify({ status }),
             });
+          }
+
+          async function completeSmokeOrder(order) {
+            const transitionsByStatus = {
+              NEW: ["SENT_TO_KITCHEN", "READY", "PACKED", "DELIVERED_PAID"],
+              SENT_TO_KITCHEN: ["READY", "PACKED", "DELIVERED_PAID"],
+              READY: ["PACKED", "DELIVERED_PAID"],
+              PACKED: ["DELIVERED_PAID"],
+            };
+
+            for (const nextStatus of transitionsByStatus[order.status] || []) {
+              await setOrderStatus(order.id, nextStatus);
+            }
           }
 
           await request("/api/v1/health");
@@ -437,6 +454,18 @@ jobs:
           }
 
           assert.equal(workspace.body?.data?.shift?.state, "OPEN", "shift must be open for full smoke");
+          const leftoverSmokeOrders = [
+            ...(workspace.body?.data?.orderGroups?.new || []),
+            ...(workspace.body?.data?.orderGroups?.inProgress || []),
+          ].filter(isSmokeOrder);
+          for (const order of leftoverSmokeOrders) {
+            await completeSmokeOrder(order);
+          }
+          if (leftoverSmokeOrders.length > 0) {
+            workspace = await getWorkspace();
+            summary.push(`completed leftover smoke orders: ${leftoverSmokeOrders.length}`);
+          }
+
           orderingStatus = await getOrderingStatus();
           assert.equal(orderingStatus.body?.data?.acceptingOrders, true, "public ordering status must accept orders while shift is open");
 
@@ -444,9 +473,10 @@ jobs:
           const publicOrder = await createPublicSmokeOrder();
           const publicOrderId = publicOrder.body?.data?.id;
           assert.ok(publicOrderId, "public smoke order was not created");
-          assert.ok(publicOrder.body?.data?.shiftId, "public smoke order must include shiftId");
-          assert.equal(publicOrder.body?.data?.status, "NEW", "public smoke order must start as NEW");
-          assert.equal(publicOrder.body?.data?.source, "SITE", "public smoke order source must be SITE");
+          const publicOrderDetail = await request(`/api/v1/orders/${publicOrderId}`, { headers: authHeaders });
+          assert.ok(publicOrderDetail.body?.data?.shiftId, "public smoke order must include shiftId");
+          assert.equal(publicOrderDetail.body?.data?.status, "NEW", "public smoke order must start as NEW");
+          assert.equal(publicOrderDetail.body?.data?.source, "SITE", "public smoke order source must be SITE");
 
           workspace = await getWorkspace();
           assert.ok(hasOrder(workspace.body?.data?.orderGroups?.new, publicOrderId), "public smoke order is missing from dispatcher new group");
