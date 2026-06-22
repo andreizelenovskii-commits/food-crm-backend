@@ -269,10 +269,6 @@ jobs:
             return orderIds(orders).includes(orderId);
           }
 
-          function isSmokeOrder(order) {
-            return typeof order?.customerComment === "string" && order.customerComment.startsWith("staging smoke");
-          }
-
           function errorCode(result) {
             return result.body?.error?.code || null;
           }
@@ -323,6 +319,22 @@ jobs:
             for (const nextStatus of transitionsByStatus[order.status] || []) {
               await setOrderStatus(order.id, nextStatus);
             }
+          }
+
+          async function getActiveSmokeOrders(shiftId) {
+            const result = await pool.query(
+              `
+                SELECT "id", "status"
+                FROM "Order"
+                WHERE "shiftId" = $1
+                  AND "customerComment" LIKE 'staging smoke%'
+                  AND "status" IN ('NEW', 'SENT_TO_KITCHEN', 'READY', 'PACKED')
+                ORDER BY "id" ASC
+              `,
+              [shiftId],
+            );
+
+            return result.rows;
           }
 
           await request("/api/v1/health");
@@ -454,10 +466,7 @@ jobs:
           }
 
           assert.equal(workspace.body?.data?.shift?.state, "OPEN", "shift must be open for full smoke");
-          const leftoverSmokeOrders = [
-            ...(workspace.body?.data?.orderGroups?.new || []),
-            ...(workspace.body?.data?.orderGroups?.inProgress || []),
-          ].filter(isSmokeOrder);
+          const leftoverSmokeOrders = await getActiveSmokeOrders(workspace.body.data.shift.id);
           for (const order of leftoverSmokeOrders) {
             await completeSmokeOrder(order);
           }
@@ -517,6 +526,14 @@ jobs:
           await setOrderStatus(secondOrderId, "DELIVERED_PAID");
 
           workspace = await getWorkspace();
+          const remainingSmokeOrders = await getActiveSmokeOrders(workspace.body.data.shift.id);
+          for (const order of remainingSmokeOrders) {
+            await completeSmokeOrder(order);
+          }
+          if (remainingSmokeOrders.length > 0) {
+            workspace = await getWorkspace();
+            summary.push(`completed remaining smoke orders: ${remainingSmokeOrders.length}`);
+          }
           const closeAttempt = await requestAllowFailure(`/api/v1/dispatcher-shifts/${workspace.body.data.shift.id}/close`, {
             method: "POST",
             headers: authHeaders,
