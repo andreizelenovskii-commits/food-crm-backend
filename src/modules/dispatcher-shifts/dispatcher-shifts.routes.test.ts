@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const source = readFileSync(resolve("src/modules/dispatcher-shifts/dispatcher-shifts.routes.ts"), "utf8");
+const serviceSource = readFileSync(resolve("src/modules/dispatcher-shifts/dispatcher-shifts.service.ts"), "utf8");
 
 test("dispatcher shift read endpoints opt out of HTTP caching", () => {
   for (const route of [
@@ -32,4 +33,13 @@ test("dispatcher workspace is permission-gated for shift roles", () => {
 test("shift detail endpoint is available for manager history drilldown", () => {
   assert.match(source, /\/api\/v1\/dispatcher-shifts\/:shiftId"/);
   assert.match(source, /getDispatcherShiftDetail\(user, getNumericParam\(request, "shiftId"\)\)/);
+});
+
+test("shift close reports active smoke orders before time-window errors", () => {
+  const activeOrdersIndex = serviceSource.indexOf('code: "SHIFT_HAS_ACTIVE_ORDERS"');
+  const earlyCloseIndex = serviceSource.indexOf('code: "SHIFT_CLOSE_TOO_EARLY"');
+
+  assert.notEqual(activeOrdersIndex, -1, "active-order close error is missing");
+  assert.notEqual(earlyCloseIndex, -1, "early-close error is missing");
+  assert.ok(activeOrdersIndex < earlyCloseIndex, "active orders must be reported before early close time");
 });

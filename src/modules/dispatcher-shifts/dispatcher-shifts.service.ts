@@ -125,20 +125,20 @@ export async function closeDispatcherShift(input: {
       throw new ConflictError("Смена уже закрыта", { code: "SHIFT_NOT_OPEN" });
     }
 
-    const closeAvailableAt = getCloseThreshold(shift.businessDate, shift.timeZone);
-
-    if (now < closeAvailableAt) {
-      throw new ConflictError("Закрытие смены доступно после 21:00 по сахалинскому времени", {
-        code: "SHIFT_CLOSE_TOO_EARLY",
-      });
-    }
-
     const metrics = await calculateShiftMetrics(shift.id, client);
 
     if (metrics.activeOrdersCount > 0) {
       throw new ConflictError("Завершите активные заказы перед закрытием смены", {
         code: "SHIFT_HAS_ACTIVE_ORDERS",
         details: { activeOrdersCount: metrics.activeOrdersCount },
+      });
+    }
+
+    const closeAvailableAt = getCloseThreshold(shift.businessDate, shift.timeZone);
+
+    if (now < closeAvailableAt) {
+      throw new ConflictError("Закрытие смены доступно после 21:00 по сахалинскому времени", {
+        code: "SHIFT_CLOSE_TOO_EARLY",
       });
     }
 
