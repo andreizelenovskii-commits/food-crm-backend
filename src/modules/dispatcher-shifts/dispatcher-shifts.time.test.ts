@@ -10,6 +10,7 @@ import {
   getBusinessDayStart,
   getCloseThreshold,
   getLocalDevClockOverrideNow,
+  getLocalDevClockOverridePath,
   getOpenThreshold,
   parseBusinessDateTime,
 } from "@backend/modules/dispatcher-shifts/dispatcher-shifts.time";
@@ -53,6 +54,26 @@ test("local development clock override reads ignored file only in development", 
     assert.equal(developmentNow?.toISOString(), "2026-06-23T22:00:00.000Z");
     assert.equal(productionNow, null);
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("local development clock path can be isolated by env", () => {
+  const dir = mkdtempSync(join(tmpdir(), "foodlike-clock-path-"));
+  const overridePath = join(dir, "shift-test-clock.json");
+  const previousPath = process.env.LOCAL_DEV_CLOCK_FILE;
+
+  try {
+    writeFileSync(overridePath, JSON.stringify({ now: "2026-06-23T22:00:00.000Z" }));
+    process.env.LOCAL_DEV_CLOCK_FILE = overridePath;
+
+    assert.equal(getLocalDevClockOverridePath(), overridePath);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.LOCAL_DEV_CLOCK_FILE;
+    } else {
+      process.env.LOCAL_DEV_CLOCK_FILE = previousPath;
+    }
     rmSync(dir, { recursive: true, force: true });
   }
 });

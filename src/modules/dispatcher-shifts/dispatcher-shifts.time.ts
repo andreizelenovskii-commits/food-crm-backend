@@ -113,6 +113,11 @@ export function isLocalDevClockOverrideAllowed(env: NodeJS.ProcessEnv = process.
 }
 
 export function getLocalDevClockOverridePath(cwd = process.cwd()) {
+  const configuredPath = process.env.LOCAL_DEV_CLOCK_FILE?.trim();
+  if (configuredPath) {
+    return resolve(configuredPath);
+  }
+
   return resolve(cwd, LOCAL_DEV_CLOCK_FILE);
 }
 
