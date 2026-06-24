@@ -1,13 +1,17 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 export const BUSINESS_TIME_ZONE = process.env.BUSINESS_TIME_ZONE || "Asia/Sakhalin";
 export const SHIFT_OPEN_HOUR = 9;
 export const SHIFT_CLOSE_HOUR = 21;
+export const LOCAL_DEV_CLOCK_FILE = ".local-dev-clock.json";
 
 export type Clock = {
   now(): Date;
 };
 
 export const systemClock: Clock = {
-  now: () => new Date(),
+  now: () => getLocalDevClockOverrideNow() ?? new Date(),
 };
 
 type ZonedParts = {
@@ -67,6 +71,81 @@ function zonedDateTimeToUtc(parts: Omit<ZonedParts, "minute" | "second"> & {
   const offsetMs = zonedGuessAsUtc - utcGuess;
 
   return new Date(utcGuess - offsetMs);
+}
+
+export function parseBusinessDateTime(value: string, timeZone = BUSINESS_TIME_ZONE) {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+
+  if (!match) {
+    throw new Error("Use format YYYY-MM-DD HH:mm");
+  }
+
+  const [, year, month, day, hour, minute, second = "00"] = match;
+  const parts = {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+    second: Number(second),
+  };
+
+  if (
+    parts.month < 1 ||
+    parts.month > 12 ||
+    parts.day < 1 ||
+    parts.day > 31 ||
+    parts.hour < 0 ||
+    parts.hour > 23 ||
+    parts.minute < 0 ||
+    parts.minute > 59 ||
+    parts.second < 0 ||
+    parts.second > 59
+  ) {
+    throw new Error("Invalid local business date/time");
+  }
+
+  return zonedDateTimeToUtc(parts, timeZone);
+}
+
+export function isLocalDevClockOverrideAllowed(env: NodeJS.ProcessEnv = process.env) {
+  return env.NODE_ENV === "development" && env.LOCAL_DEV_TOOLS_ENABLED === "true";
+}
+
+export function getLocalDevClockOverridePath(cwd = process.cwd()) {
+  return resolve(cwd, LOCAL_DEV_CLOCK_FILE);
+}
+
+export function getLocalDevClockOverrideNow(input: {
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+  path?: string;
+} = {}) {
+  const env = input.env ?? process.env;
+
+  if (!isLocalDevClockOverrideAllowed(env)) {
+    return null;
+  }
+
+  const filePath = input.path ?? getLocalDevClockOverridePath(input.cwd);
+
+  if (!existsSync(filePath)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(readFileSync(filePath, "utf8")) as { now?: unknown };
+
+    if (typeof payload.now !== "string") {
+      return null;
+    }
+
+    const parsed = new Date(payload.now);
+
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  } catch {
+    return null;
+  }
 }
 
 export function getBusinessDateParts(now: Date, timeZone = BUSINESS_TIME_ZONE) {
