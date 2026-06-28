@@ -24,6 +24,7 @@ const PROTECTED_ROUTES: RouteGuardExpectation[] = [
   { file: "src/modules/clients/clients.routes.ts", route: "/api/v1/clients", guard: 'requirePermission("manage_clients")' },
   { file: "src/modules/dashboard/dashboard.routes.ts", route: "/api/v1/dashboard", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/sales-analytics/sales-analytics.routes.ts", route: "/api/v1/analytics/sales", guard: 'requirePermission("view_dashboard")' },
+  { file: "src/modules/management-accounting/management-accounting.routes.ts", route: "/api/v1/analytics/management", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/employees/employees.routes.ts", route: "/api/v1/employees", guard: 'requirePermission("view_employees")' },
   { file: "src/modules/employees/employees.routes.ts", route: "/api/v1/employees", guard: 'requirePermission("manage_employees")' },
   { file: "src/modules/inventory/inventory.routes.ts", route: "/api/v1/inventory/products", guard: 'requirePermission("view_inventory")' },
