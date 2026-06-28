@@ -17,8 +17,10 @@ import {
   deleteManagementAccountingManualEntry,
   getDailyEmployeeRows,
   getManagementAccountingDay,
+  getManagementAccountingDaySnapshot,
   getManagementAccountingManualEntry,
   getManagementAccountingManualEntries,
+  getManagementAccountingMenuPositions,
   isManagementAccountingDayEditable,
   startManagementAccountingDay,
   updateManagementAccountingManualEntry,
@@ -28,6 +30,7 @@ import type {
   ManagementAccountingDto,
   ManagementAccountingManualEntry,
   ManagementAccountingMetric,
+  ManagementAccountingPositionMetric,
   ManagementAccountingRange,
 } from "@backend/modules/management-accounting/management-accounting.types";
 import type { ManagementAccountingManualEntryInput } from "@backend/modules/management-accounting/management-accounting.validation";
@@ -93,6 +96,31 @@ function groupManualEntries(entries: ManagementAccountingManualEntry[], type: "I
     label,
     value,
   }));
+}
+
+function buildPositionMetrics(
+  rows: Awaited<ReturnType<typeof getManagementAccountingMenuPositions>>,
+): ManagementAccountingPositionMetric[] {
+  return rows.map((row) => {
+    const revenueCents = toNumber(row.revenue_cents);
+    const costCents = toNumber(row.cost_cents);
+    const marginCents = toNumber(row.margin_cents);
+    const foodCostPercent = formatPercent(costCents, revenueCents);
+
+    return {
+      label: row.label,
+      quantity: formatNumber(Number(row.quantity ?? 0)),
+      revenueCents,
+      costCents,
+      marginCents,
+      foodCostPercent,
+      hint: `${formatNumber(Number(row.quantity ?? 0))} шт · выручка ${formatMoney(revenueCents)} · себес ${formatMoney(costCents)}`,
+    };
+  });
+}
+
+function isManagementAccountingDto(value: unknown): value is ManagementAccountingDto {
+  return typeof value === "object" && value !== null && "range" in value && "kpis" in value;
 }
 
 function buildStaffMembers(rows: Awaited<ReturnType<typeof getDailyEmployeeRows>>, date: string) {
@@ -199,9 +227,14 @@ export async function closeDailyManagementAccounting(input: {
   date: string;
   user: AuthenticatedApiUser;
 }) {
+  const snapshot = await getManagementAccounting({
+    date: input.date,
+    user: input.user,
+  });
   const closed = await closeManagementAccountingDay({
     date: input.date,
     userId: input.user.id,
+    snapshot,
   });
 
   if (!closed) {
@@ -219,12 +252,25 @@ export async function getManagementAccounting({
   user: AuthenticatedApiUser;
 }): Promise<ManagementAccountingDto> {
   const range = buildRange(date);
+  const accountingDay = await getManagementAccountingDay(range.date);
+
+  if (accountingDay.status === "CLOSED") {
+    const snapshot = await getManagementAccountingDaySnapshot(range.date);
+
+    if (isManagementAccountingDto(snapshot)) {
+      return {
+        ...snapshot,
+        accountingDay,
+      };
+    }
+  }
+
   const availability = {
     orders: hasApiPermission(user, "view_orders"),
     inventory: hasApiPermission(user, "view_inventory"),
     manualOperations: hasApiPermission(user, "view_dashboard"),
   };
-  const [data, manualEntries, employeeRows, shift, accountingDay] = await Promise.all([
+  const [data, manualEntries, employeeRows, shift, topPositionRows, badPositionRows] = await Promise.all([
     getSalesAnalyticsRepositoryData({
       start: range.start,
       end: range.end,
@@ -233,7 +279,18 @@ export async function getManagementAccounting({
     getManagementAccountingManualEntries(range.date),
     getDailyEmployeeRows({ start: range.start, end: range.end }),
     getShiftByBusinessDate(range.date),
-    getManagementAccountingDay(range.date),
+    getManagementAccountingMenuPositions({
+      start: range.start,
+      end: range.end,
+      order: "best",
+      limit: 8,
+    }),
+    getManagementAccountingMenuPositions({
+      start: range.start,
+      end: range.end,
+      order: "worst",
+      limit: 8,
+    }),
   ]);
   const staffMembers = buildStaffMembers(employeeRows, range.date);
   const staffTotals = staffMembers.reduce(
@@ -274,6 +331,8 @@ export async function getManagementAccounting({
   const netProfitPercent = formatPercent(netProfitCents, revenueCents);
   const manualIncomeGroups = groupManualEntries(manualEntries, "INCOME");
   const manualExpenseGroups = groupManualEntries(manualEntries, "EXPENSE");
+  const topPositions = buildPositionMetrics(topPositionRows);
+  const badPositions = buildPositionMetrics(badPositionRows);
 
   const kpis: ManagementAccountingMetric[] = [
     { label: "Выручка дня", value: formatMoney(revenueCents), hint: `${completedOrders} оплаченных заказов` },
@@ -342,6 +401,8 @@ export async function getManagementAccounting({
     expenses,
     profit,
     foodCost,
+    topPositions,
+    badPositions,
     shift: shift
       ? {
         id: shift.id,

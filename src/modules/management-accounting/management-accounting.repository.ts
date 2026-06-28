@@ -24,6 +24,15 @@ type AccountingDayRow = {
   status: "OPEN" | "CLOSED";
   openedAt: Date;
   closedAt: Date | null;
+  snapshot: unknown | null;
+};
+
+export type ManagementAccountingMenuPositionRow = {
+  label: string;
+  quantity: string;
+  revenue_cents: string | null;
+  cost_cents: string | null;
+  margin_cents: string | null;
 };
 
 export type DailyEmployeeRow = {
@@ -81,7 +90,7 @@ function mapManualEntry(row: ManualEntryRow): ManagementAccountingManualEntry {
 export async function getManagementAccountingDay(date: string) {
   const result = await pool.query<AccountingDayRow>(
     `
-      SELECT "id", "businessDate", "status", "openedAt", "closedAt"
+      SELECT "id", "businessDate", "status", "openedAt", "closedAt", "snapshot"
       FROM "ManagementAccountingDay"
       WHERE "businessDate" = $1
       LIMIT 1
@@ -113,7 +122,7 @@ export async function startManagementAccountingDay(input: {
           ELSE "ManagementAccountingDay"."status"
         END,
         "updatedAt" = NOW()
-      RETURNING "id", "businessDate", "status", "openedAt", "closedAt"
+      RETURNING "id", "businessDate", "status", "openedAt", "closedAt", "snapshot"
     `,
     [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId],
   );
@@ -124,6 +133,7 @@ export async function startManagementAccountingDay(input: {
 export async function closeManagementAccountingDay(input: {
   date: string;
   userId: number;
+  snapshot: unknown;
 }) {
   await ensureRecentDatabaseBackup("management-accounting-day-close");
   const result = await pool.query<AccountingDayRow>(
@@ -133,15 +143,85 @@ export async function closeManagementAccountingDay(input: {
         "status" = 'CLOSED',
         "closedByUserId" = $2,
         "closedAt" = NOW(),
+        "snapshot" = $3::jsonb,
         "updatedAt" = NOW()
       WHERE "businessDate" = $1
         AND "status" = 'OPEN'
-      RETURNING "id", "businessDate", "status", "openedAt", "closedAt"
+      RETURNING "id", "businessDate", "status", "openedAt", "closedAt", "snapshot"
     `,
-    [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId],
+    [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId, JSON.stringify(input.snapshot)],
   );
 
   return result.rows[0] ? mapAccountingDay(result.rows[0], input.date) : null;
+}
+
+export async function getManagementAccountingDaySnapshot(date: string) {
+  const result = await pool.query<{ snapshot: unknown | null }>(
+    `
+      SELECT "snapshot"
+      FROM "ManagementAccountingDay"
+      WHERE "businessDate" = $1
+        AND "status" = 'CLOSED'
+      LIMIT 1
+    `,
+    [getBusinessDateUtc(date, BUSINESS_TIME_ZONE)],
+  );
+
+  return result.rows[0]?.snapshot ?? null;
+}
+
+export async function getManagementAccountingMenuPositions(input: {
+  start: string;
+  end: string;
+  order: "best" | "worst";
+  limit: number;
+}) {
+  const orderSql = input.order === "best"
+    ? `"margin_cents" DESC, "revenue_cents" DESC`
+    : `"margin_cents" ASC, "revenue_cents" DESC`;
+  const result = await pool.query<ManagementAccountingMenuPositionRow>(
+    `
+      WITH card_cost AS (
+        SELECT
+          tc."id" AS tech_card_id,
+          COALESCE(SUM(tci."quantity" * p."priceCents"), 0) / GREATEST(tc."outputQuantity", 1) AS unit_cost_cents
+        FROM "TechnologicalCard" tc
+        LEFT JOIN "TechCardIngredient" tci ON tci."technologicalCardId" = tc."id"
+        LEFT JOIN "Product" p ON p."id" = tci."productId"
+        GROUP BY tc."id", tc."outputQuantity"
+      ),
+      position_totals AS (
+        SELECT
+          oi."itemName" AS label,
+          COALESCE(SUM(oi."quantity"), 0) AS quantity,
+          COALESCE(SUM(oi."totalPriceCents"), 0) AS revenue_cents,
+          COALESCE(SUM(oi."quantity" * COALESCE(cc.unit_cost_cents, 0)), 0) AS cost_cents,
+          COALESCE(SUM(oi."totalPriceCents"), 0) - COALESCE(SUM(oi."quantity" * COALESCE(cc.unit_cost_cents, 0)), 0) AS margin_cents
+        FROM "OrderItem" oi
+        INNER JOIN "Order" o ON o."id" = oi."orderId"
+        LEFT JOIN "CatalogItem" ci ON ci."id" = oi."catalogItemId"
+        LEFT JOIN "CatalogItemVariant" civ ON civ."id" = oi."catalogItemVariantId"
+        LEFT JOIN card_cost cc ON cc.tech_card_id = COALESCE(civ."technologicalCardId", ci."technologicalCardId")
+        WHERE o."createdAt" >= $1::timestamptz
+          AND o."createdAt" < $2::timestamptz
+          AND o."status" = 'DELIVERED_PAID'
+        GROUP BY oi."itemName"
+      )
+      SELECT
+        label,
+        quantity,
+        revenue_cents,
+        cost_cents,
+        margin_cents
+      FROM position_totals
+      WHERE revenue_cents > 0
+      ORDER BY ${orderSql}
+      LIMIT $3
+    `,
+    [input.start, input.end, input.limit],
+  );
+
+  return result.rows;
 }
 
 export async function isManagementAccountingDayEditable(date: string) {
