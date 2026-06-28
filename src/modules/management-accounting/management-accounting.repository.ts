@@ -58,6 +58,7 @@ function mapAccountingDay(row: AccountingDayRow | null | undefined, date: string
       canStart: true,
       canEdit: false,
       canClose: false,
+      canReopen: false,
     };
   }
 
@@ -70,6 +71,7 @@ function mapAccountingDay(row: AccountingDayRow | null | undefined, date: string
     canStart: false,
     canEdit: row.status === "OPEN",
     canClose: row.status === "OPEN",
+    canReopen: row.status === "CLOSED",
   };
 }
 
@@ -150,6 +152,31 @@ export async function closeManagementAccountingDay(input: {
       RETURNING "id", "businessDate", "status", "openedAt", "closedAt", "snapshot"
     `,
     [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId, JSON.stringify(input.snapshot)],
+  );
+
+  return result.rows[0] ? mapAccountingDay(result.rows[0], input.date) : null;
+}
+
+export async function reopenManagementAccountingDay(input: {
+  date: string;
+  userId: number;
+}) {
+  await ensureRecentDatabaseBackup("management-accounting-day-reopen");
+  const result = await pool.query<AccountingDayRow>(
+    `
+      UPDATE "ManagementAccountingDay"
+      SET
+        "status" = 'OPEN',
+        "closedByUserId" = NULL,
+        "closedAt" = NULL,
+        "snapshot" = NULL,
+        "openedByUserId" = $2,
+        "updatedAt" = NOW()
+      WHERE "businessDate" = $1
+        AND "status" = 'CLOSED'
+      RETURNING "id", "businessDate", "status", "openedAt", "closedAt", "snapshot"
+    `,
+    [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId],
   );
 
   return result.rows[0] ? mapAccountingDay(result.rows[0], input.date) : null;

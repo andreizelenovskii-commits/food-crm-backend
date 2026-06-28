@@ -27,6 +27,7 @@ const PROTECTED_ROUTES: RouteGuardExpectation[] = [
   { file: "src/modules/management-accounting/management-accounting.routes.ts", route: "/api/v1/analytics/management", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/management-accounting/management-accounting.routes.ts", route: "/api/v1/analytics/management/day/start", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/management-accounting/management-accounting.routes.ts", route: "/api/v1/analytics/management/day/close", guard: 'requirePermission("view_dashboard")' },
+  { file: "src/modules/management-accounting/management-accounting.routes.ts", route: "/api/v1/analytics/management/day/reopen", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/management-accounting/management-accounting.routes.ts", route: "/api/v1/analytics/management/manual-entries", guard: 'requirePermission("view_dashboard")' },
   { file: "src/modules/employees/employees.routes.ts", route: "/api/v1/employees", guard: 'requirePermission("view_employees")' },
   { file: "src/modules/employees/employees.routes.ts", route: "/api/v1/employees", guard: 'requirePermission("manage_employees")' },

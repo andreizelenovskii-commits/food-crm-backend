@@ -22,6 +22,7 @@ import {
   getManagementAccountingManualEntries,
   getManagementAccountingMenuPositions,
   isManagementAccountingDayEditable,
+  reopenManagementAccountingDay,
   startManagementAccountingDay,
   updateManagementAccountingManualEntry,
 } from "@backend/modules/management-accounting/management-accounting.repository";
@@ -242,6 +243,22 @@ export async function closeDailyManagementAccounting(input: {
   }
 
   return closed;
+}
+
+export async function reopenDailyManagementAccounting(input: {
+  date: string;
+  user: AuthenticatedApiUser;
+}) {
+  const reopened = await reopenManagementAccountingDay({
+    date: input.date,
+    userId: input.user.id,
+  });
+
+  if (!reopened) {
+    throw new ValidationError("Открыть для корректировки можно только закрытый управленческий учет");
+  }
+
+  return reopened;
 }
 
 export async function getManagementAccounting({

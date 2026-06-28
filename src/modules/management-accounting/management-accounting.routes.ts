@@ -7,6 +7,7 @@ import {
   editManagementAccountingManualEntry,
   getManagementAccounting,
   removeManagementAccountingManualEntry,
+  reopenDailyManagementAccounting,
   startDailyManagementAccounting,
 } from "@backend/modules/management-accounting/management-accounting.service";
 import {
@@ -67,6 +68,27 @@ export async function registerManagementAccountingRoutes(app: FastifyInstance) {
       await writeAuditLog({
         request,
         action: "management_accounting.day.close",
+        entityType: "management_accounting_day",
+        entityId: day.id ? String(day.id) : undefined,
+        after: day,
+      });
+
+      return { data: day };
+    },
+  );
+
+  app.post(
+    "/api/v1/analytics/management/day/reopen",
+    { preHandler: requireDashboard },
+    async (request) => {
+      const input = parseManagementAccountingDayActionInput(getRequestBody(request));
+      const day = await reopenDailyManagementAccounting({
+        ...input,
+        user: request.authUser!,
+      });
+      await writeAuditLog({
+        request,
+        action: "management_accounting.day.reopen",
         entityType: "management_accounting_day",
         entityId: day.id ? String(day.id) : undefined,
         after: day,
