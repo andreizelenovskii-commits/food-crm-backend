@@ -163,6 +163,11 @@ enum EmployeeAdjustmentType {
   DEBT
 }
 
+enum ManagementAccountingEntryType {
+  INCOME
+  EXPENSE
+}
+
 model EmployeeAdjustment {
   id         Int                     @id @default(autoincrement())
   employee   Employee                @relation(fields: [employeeId], references: [id])
@@ -171,6 +176,21 @@ model EmployeeAdjustment {
   amountCents Int
   comment    String?
   createdAt  DateTime                @default(now())
+}
+
+model ManagementAccountingEntry {
+  id              Int                           @id @default(autoincrement())
+  businessDate    DateTime
+  type            ManagementAccountingEntryType
+  category        String
+  amountCents     Int
+  comment         String?
+  createdByUserId Int?
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  @@index([businessDate])
+  @@index([businessDate, type])
 }
 
 model Order {

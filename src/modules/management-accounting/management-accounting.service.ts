@@ -1,15 +1,30 @@
 import { hasApiPermission, type AuthenticatedApiUser } from "@backend/modules/access/access-control";
+import { getShiftByBusinessDate } from "@backend/modules/dispatcher-shifts/dispatcher-shifts.repository";
+import {
+  formatHours,
+  formatScheduleDateKey,
+  normalizeEmployeeSchedule,
+} from "@backend/modules/employees/employees.schedule";
 import {
   buildSalesAnalyticsRange,
 } from "@backend/modules/sales-analytics/sales-analytics.periods";
 import {
   getSalesAnalyticsRepositoryData,
 } from "@backend/modules/sales-analytics/sales-analytics.repository";
+import {
+  createManagementAccountingManualEntry,
+  deleteManagementAccountingManualEntry,
+  getDailyEmployeeRows,
+  getManagementAccountingManualEntries,
+  updateManagementAccountingManualEntry,
+} from "@backend/modules/management-accounting/management-accounting.repository";
 import type {
   ManagementAccountingDto,
+  ManagementAccountingManualEntry,
   ManagementAccountingMetric,
   ManagementAccountingRange,
 } from "@backend/modules/management-accounting/management-accounting.types";
+import type { ManagementAccountingManualEntryInput } from "@backend/modules/management-accounting/management-accounting.validation";
 
 const MONEY_FORMATTER = new Intl.NumberFormat("ru-RU", {
   style: "currency",
@@ -51,6 +66,94 @@ function buildRange(date?: string): ManagementAccountingRange {
   };
 }
 
+function sumManualEntries(entries: ManagementAccountingManualEntry[], type: "INCOME" | "EXPENSE") {
+  return entries
+    .filter((entry) => entry.type === type)
+    .reduce((total, entry) => total + entry.amountCents, 0);
+}
+
+function groupManualEntries(entries: ManagementAccountingManualEntry[], type: "INCOME" | "EXPENSE") {
+  const groups = new Map<string, number>();
+
+  for (const entry of entries) {
+    if (entry.type !== type) {
+      continue;
+    }
+
+    groups.set(entry.category, (groups.get(entry.category) ?? 0) + entry.amountCents);
+  }
+
+  return Array.from(groups.entries()).map(([label, value]) => ({
+    label,
+    value,
+  }));
+}
+
+function buildStaffMembers(rows: Awaited<ReturnType<typeof getDailyEmployeeRows>>, date: string) {
+  const referenceDate = new Date(`${date}T00:00:00`);
+  const dateKey = formatScheduleDateKey(referenceDate);
+
+  return rows
+    .map((row) => {
+      const schedule = normalizeEmployeeSchedule(row.schedule, referenceDate);
+      const scheduledHours = schedule.days[dateKey]?.shifts.reduce((sum, shift) => sum + shift.hours, 0) ?? 0;
+      const ordersCount = toNumber(row.ordersCount);
+      const revenueCents = toNumber(row.revenueCents);
+      const advancesCents = toNumber(row.advancesCents);
+      const finesCents = toNumber(row.finesCents);
+      const debtCents = toNumber(row.debtCents);
+      const payoutCents = Math.max(advancesCents + debtCents - finesCents, 0);
+
+      return {
+        employeeId: row.employeeId,
+        name: row.name,
+        role: row.role,
+        scheduledHours,
+        ordersCount,
+        revenueCents,
+        advancesCents,
+        finesCents,
+        debtCents,
+        payoutCents,
+        summary: `${formatHours(scheduledHours)} ч · аванс ${formatMoney(advancesCents)} · штраф ${formatMoney(finesCents)}`,
+      };
+    })
+    .filter((employee) =>
+      employee.scheduledHours > 0 ||
+      employee.ordersCount > 0 ||
+      employee.advancesCents > 0 ||
+      employee.finesCents > 0 ||
+      employee.debtCents > 0,
+    );
+}
+
+export async function addManagementAccountingManualEntry(
+  input: ManagementAccountingManualEntryInput,
+  user: AuthenticatedApiUser,
+) {
+  return createManagementAccountingManualEntry({
+    ...input,
+    createdByUserId: user.id,
+  });
+}
+
+export async function editManagementAccountingManualEntry(
+  entryId: number,
+  input: ManagementAccountingManualEntryInput,
+) {
+  return updateManagementAccountingManualEntry({
+    entryId,
+    type: input.type,
+    category: input.category,
+    amountCents: input.amountCents,
+    comment: input.comment,
+  });
+}
+
+export async function removeManagementAccountingManualEntry(entryId: number) {
+  return deleteManagementAccountingManualEntry(entryId);
+}
+
 export async function getManagementAccounting({
   date,
   user,
@@ -62,17 +165,39 @@ export async function getManagementAccounting({
   const availability = {
     orders: hasApiPermission(user, "view_orders"),
     inventory: hasApiPermission(user, "view_inventory"),
-    manualOperations: false,
+    manualOperations: hasApiPermission(user, "view_dashboard"),
   };
-  const data = await getSalesAnalyticsRepositoryData({
-    start: range.start,
-    end: range.end,
-    lookbackStart: range.start,
-  });
+  const [data, manualEntries, employeeRows, shift] = await Promise.all([
+    getSalesAnalyticsRepositoryData({
+      start: range.start,
+      end: range.end,
+      lookbackStart: range.start,
+    }),
+    getManagementAccountingManualEntries(range.date),
+    getDailyEmployeeRows({ start: range.start, end: range.end }),
+    getShiftByBusinessDate(range.date),
+  ]);
+  const staffMembers = buildStaffMembers(employeeRows, range.date);
+  const staffTotals = staffMembers.reduce(
+    (acc, employee) => ({
+      scheduledHours: acc.scheduledHours + employee.scheduledHours,
+      advancesCents: acc.advancesCents + employee.advancesCents,
+      finesCents: acc.finesCents + employee.finesCents,
+      debtCents: acc.debtCents + employee.debtCents,
+      payoutCents: acc.payoutCents + employee.payoutCents,
+    }),
+    {
+      scheduledHours: 0,
+      advancesCents: 0,
+      finesCents: 0,
+      debtCents: 0,
+      payoutCents: 0,
+    },
+  );
 
   const completedOrders = availability.orders ? toNumber(data.orderTotals.completed_count) : 0;
   const periodOrders = availability.orders ? toNumber(data.orderTotals.period_orders_count) : 0;
-  const revenueCents = availability.orders ? toNumber(data.orderTotals.revenue_cents) : 0;
+  const revenueCents = availability.orders ? (shift?.revenueCents ?? toNumber(data.orderTotals.revenue_cents)) : 0;
   const subtotalCents = availability.orders ? toNumber(data.orderTotals.subtotal_cents) : 0;
   const discountCents = Math.max(subtotalCents - revenueCents, 0);
   const averageCheckCents = completedOrders ? Math.round(revenueCents / completedOrders) : 0;
@@ -81,13 +206,16 @@ export async function getManagementAccounting({
   const writeoffCents = availability.inventory ? toNumber(data.actTotals.writeoff_total_cents) : 0;
   const incomingCount = availability.inventory ? toNumber(data.actTotals.incoming_count) : 0;
   const writeoffCount = availability.inventory ? toNumber(data.actTotals.writeoff_count) : 0;
-  const manualIncomeCents = 0;
-  const manualExpenseCents = 0;
+  const manualIncomeCents = sumManualEntries(manualEntries, "INCOME");
+  const manualExpenseCents = sumManualEntries(manualEntries, "EXPENSE");
+  const staffPayoutCents = staffTotals.payoutCents;
   const grossProfitCents = revenueCents - estimatedFoodCostCents;
   const grossMarginPercent = formatPercent(grossProfitCents, revenueCents);
   const foodCostPercent = formatPercent(estimatedFoodCostCents, revenueCents);
-  const netProfitCents = revenueCents + manualIncomeCents - estimatedFoodCostCents - writeoffCents - manualExpenseCents;
+  const netProfitCents = revenueCents + manualIncomeCents - estimatedFoodCostCents - writeoffCents - staffPayoutCents - manualExpenseCents;
   const netProfitPercent = formatPercent(netProfitCents, revenueCents);
+  const manualIncomeGroups = groupManualEntries(manualEntries, "INCOME");
+  const manualExpenseGroups = groupManualEntries(manualEntries, "EXPENSE");
 
   const kpis: ManagementAccountingMetric[] = [
     { label: "Выручка дня", value: formatMoney(revenueCents), hint: `${completedOrders} оплаченных заказов` },
@@ -105,13 +233,24 @@ export async function getManagementAccounting({
 
   const income: ManagementAccountingMetric[] = [
     { label: "Продажи", value: formatMoney(revenueCents), hint: "Заказы в статусе оплачено/доставлено" },
-    { label: "Прочие доходы", value: formatMoney(manualIncomeCents), hint: "Основа под ручной ввод доходов" },
+    { label: "Прочие доходы", value: formatMoney(manualIncomeCents), hint: `${manualIncomeGroups.length} ручных статей` },
+    ...manualIncomeGroups.map((item) => ({
+      label: item.label,
+      value: formatMoney(item.value),
+      hint: "Ручная статья доходов",
+    })),
   ];
 
   const expenses: ManagementAccountingMetric[] = [
     { label: "Себестоимость блюд", value: formatMoney(estimatedFoodCostCents), hint: `${foodCostPercent} от выручки по техкартам` },
     { label: "Списания", value: formatMoney(writeoffCents), hint: `${writeoffCount} завершенных актов` },
-    { label: "Прочие расходы", value: formatMoney(manualExpenseCents), hint: "Основа под аренду, ФОТ, доставку и другие статьи" },
+    { label: "Персонал за день", value: formatMoney(staffPayoutCents), hint: `Авансы и долги минус штрафы, ${formatHours(staffTotals.scheduledHours)} ч` },
+    { label: "Прочие расходы", value: formatMoney(manualExpenseCents), hint: `${manualExpenseGroups.length} ручных статей: бензин, свет, аренда и т.д.` },
+    ...manualExpenseGroups.map((item) => ({
+      label: item.label,
+      value: formatMoney(item.value),
+      hint: "Ручная статья расходов",
+    })),
     { label: "Закупки", value: formatMoney(purchaseCents), hint: `${incomingCount} завершенных актов, пока как денежный поток` },
   ];
 
@@ -129,8 +268,8 @@ export async function getManagementAccounting({
   ];
 
   const dataGaps: ManagementAccountingMetric[] = [
-    { label: "Ручные доходы", value: "0", hint: "Нужна модель статей доходов для полного учета", tone: "warning" },
-    { label: "Ручные расходы", value: "0", hint: "Нужна модель статей расходов: ФОТ, аренда, комиссии, доставка", tone: "warning" },
+    { label: "Ручные доходы", value: manualIncomeGroups.length ? String(manualIncomeGroups.length) : "0", hint: "Можно добавлять вручную за конкретный день", tone: manualIncomeGroups.length ? "good" : "warning" },
+    { label: "Ручные расходы", value: manualExpenseGroups.length ? String(manualExpenseGroups.length) : "0", hint: "Бензин, аренда, свет, комиссии, доставка и любые другие статьи", tone: manualExpenseGroups.length ? "good" : "warning" },
     { label: "Закупки", value: "Денежный поток", hint: "В чистой прибыли сейчас не списываются целиком, чтобы не смешивать закупку и себестоимость" },
   ];
 
@@ -144,6 +283,24 @@ export async function getManagementAccounting({
     expenses,
     profit,
     foodCost,
+    shift: shift
+      ? {
+        id: shift.id,
+        number: shift.displayNumber,
+        status: shift.status,
+        openedAt: shift.openedAt,
+        closedAt: shift.closedAt,
+        checksCount: shift.checksCount,
+        revenueCents: shift.revenueCents,
+        totalOrdersCount: shift.totalOrdersCount,
+        cancelledOrdersCount: shift.cancelledOrdersCount,
+      }
+      : null,
+    staff: {
+      members: staffMembers,
+      totals: staffTotals,
+    },
+    manualEntries,
     dataGaps,
     rawTotals: {
       revenueCents,
@@ -154,6 +311,7 @@ export async function getManagementAccounting({
       writeoffCents,
       manualIncomeCents,
       manualExpenseCents,
+      staffPayoutCents,
       grossProfitCents,
       netProfitCents,
       completedOrders,
