@@ -31,6 +31,7 @@ import {
 } from "@backend/modules/orders/orders.workflow";
 import { ValidationError } from "@backend/shared/errors/app-error";
 import { authenticateRequest, requirePermission } from "@backend/modules/auth/auth-context";
+import { hasApiPermission } from "@backend/modules/access/access-control";
 import { getNumericParam, getRequestBody, getStringBodyField, toFormData } from "@backend/lib/request";
 import { writeAuditLog } from "@backend/modules/audit/audit-log";
 import { AuthorizationError } from "@backend/lib/http-errors";
@@ -43,12 +44,24 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
       throw new ValidationError("Войдите или зарегистрируйтесь перед оформлением заказа");
     }
 
-    return {
-      data: await createPublicOrder(
-        session.phone,
-        parsePublicOrderInput(getRequestBody(request)),
-      ),
-    };
+    const order = await createPublicOrder(
+      session.phone,
+      parsePublicOrderInput(getRequestBody(request)),
+    );
+
+    await writeAuditLog({
+      request,
+      action: "order.create",
+      entityType: "order",
+      entityId: order.id,
+      after: {
+        orderId: order.id,
+        status: order.status,
+        source: "SITE",
+      },
+    });
+
+    return { data: order };
   });
 
   app.get("/api/v1/public/orders/:orderId", async (request) => {
@@ -154,10 +167,10 @@ export async function registerOrdersRoutes(app: FastifyInstance) {
     }
 
     if (nextStatus === "CANCELLED") {
-      if (!canCancelOrder(order.status, user.role)) {
+      if (!hasApiPermission(user, "cancel_orders") || !canCancelOrder(order.status, user.role)) {
         throw new ValidationError("У вашей роли нет права отменить этот заказ");
       }
-    } else if (nextStatus !== getNextOrderStatus(order.status) || !canAdvanceOrder(order.status, user.role)) {
+    } else if (!hasApiPermission(user, "manage_orders") || nextStatus !== getNextOrderStatus(order.status) || !canAdvanceOrder(order.status, user.role)) {
       throw new ValidationError("У вашей роли нет права перевести заказ в этот статус");
     }
 

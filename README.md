@@ -4,6 +4,18 @@ Isolated API-first backend for `food-crm`.
 
 ## Run
 
+Recommended one-command local workflow from the frontend repo:
+
+```bash
+cd ../food-crm-dev
+npm run local:setup
+npm run local:dev
+```
+
+See `../food-crm-dev/docs/LOCAL_DEVELOPMENT.md`.
+
+Manual backend-only run:
+
 ```bash
 npm ci
 cp .env.example .env

@@ -7,6 +7,7 @@ test("kitchen order payload hides personal and financial data", () => {
   const order: OrderListItem = {
     id: 42,
     status: "SENT_TO_KITCHEN",
+    shiftId: 1,
     source: "SITE",
     isInternal: false,
     clientId: 7,

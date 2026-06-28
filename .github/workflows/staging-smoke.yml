@@ -258,6 +258,84 @@ jobs:
           }
 
           const data = await seedData();
+          const smokeMarker = `staging smoke ${new Date().toISOString()}`;
+          const summary = [];
+
+          function orderIds(orders) {
+            return Array.isArray(orders) ? orders.map((order) => order.id) : [];
+          }
+
+          function hasOrder(orders, orderId) {
+            return orderIds(orders).includes(orderId);
+          }
+
+          function errorCode(result) {
+            return result.body?.error?.code || null;
+          }
+
+          async function getWorkspace() {
+            return request("/api/v1/dispatcher/workspace", { headers: authHeaders });
+          }
+
+          async function getOrderingStatus() {
+            return request("/api/v1/public/ordering-status");
+          }
+
+          async function createPublicSmokeOrder() {
+            return request("/api/v1/public/orders", {
+              method: "POST",
+              headers: { cookie: createPublicClientCookie("79009999202") },
+              body: JSON.stringify({
+                deliveryAddress: "г. Smoke, ул. Test, д. 1",
+                recipientPhone: "+79009999202",
+                paymentMethod: "cash",
+                customerComment: smokeMarker,
+                items: [{
+                  catalogItemId: data.catalogItemId,
+                  catalogItemVariantId: data.catalogItemVariantId,
+                  quantity: 1,
+                  choices: [],
+                }],
+              }),
+            });
+          }
+
+          async function setOrderStatus(orderId, status) {
+            return request(`/api/v1/orders/${orderId}/status`, {
+              method: "PATCH",
+              headers: authHeaders,
+              body: JSON.stringify({ status }),
+            });
+          }
+
+          async function completeSmokeOrder(order) {
+            const transitionsByStatus = {
+              NEW: ["SENT_TO_KITCHEN", "READY", "PACKED", "DELIVERED_PAID"],
+              SENT_TO_KITCHEN: ["READY", "PACKED", "DELIVERED_PAID"],
+              READY: ["PACKED", "DELIVERED_PAID"],
+              PACKED: ["DELIVERED_PAID"],
+            };
+
+            for (const nextStatus of transitionsByStatus[order.status] || []) {
+              await setOrderStatus(order.id, nextStatus);
+            }
+          }
+
+          async function getActiveSmokeOrders(shiftId) {
+            const result = await pool.query(
+              `
+                SELECT "id", "status"
+                FROM "Order"
+                WHERE "shiftId" = $1
+                  AND "customerComment" LIKE '%staging smoke%'
+                  AND "status" IN ('NEW', 'SENT_TO_KITCHEN', 'READY', 'PACKED')
+                ORDER BY "id" ASC
+              `,
+              [shiftId],
+            );
+
+            return result.rows;
+          }
 
           await request("/api/v1/health");
           const login = await request("/api/v1/auth/login", {
@@ -280,33 +358,224 @@ jobs:
           await webRequest("/login");
           await webRequest("/dashboard/orders", crmCookie);
 
-          await request("/api/v1/orders", { headers: authHeaders });
-          const order = await request("/api/v1/orders", {
+          const roleModels = await request("/api/v1/access-model", { headers: authHeaders });
+          const roleByName = new Map((roleModels.body?.data?.roles || []).map((role) => [role.role, role.permissions || []]));
+          const dispatcherPermissions = roleByName.get("Диспетчер") || [];
+          const managerPermissions = roleByName.get("Управляющий") || [];
+          const cookPermissions = roleByName.get("Повар") || [];
+          for (const permission of ["view_orders", "manage_orders", "view_clients", "manage_dispatcher_shift"]) {
+            assert.ok(dispatcherPermissions.includes(permission), `dispatcher misses ${permission}`);
+          }
+          for (const permission of ["cancel_orders", "delete_orders", "view_dispatcher_shifts", "view_inventory", "manage_inventory"]) {
+            assert.equal(dispatcherPermissions.includes(permission), false, `dispatcher unexpectedly has ${permission}`);
+          }
+          for (const permission of ["manage_dispatcher_shift", "view_dispatcher_shifts", "cancel_orders", "delete_orders"]) {
+            assert.ok(managerPermissions.includes(permission), `manager misses ${permission}`);
+          }
+          for (const permission of ["manage_dispatcher_shift", "view_dispatcher_shifts", "cancel_orders", "delete_orders"]) {
+            assert.equal(cookPermissions.includes(permission), false, `cook unexpectedly has ${permission}`);
+          }
+          summary.push("permissions: dispatcher/manager/cook ok");
+
+          let workspace = await getWorkspace();
+          assert.equal(workspace.response.headers.get("cache-control"), "no-store", "dispatcher workspace must be no-store");
+          let orderingStatus = await getOrderingStatus();
+          assert.equal(orderingStatus.response.headers.get("cache-control"), "no-store", "ordering status must be no-store");
+          summary.push(`initial shift state: ${workspace.body?.data?.shift?.state}`);
+
+          if (workspace.body?.data?.shift?.state === "PREVIOUS_SHIFT_OPEN") {
+            const activeOrdersCount = workspace.body.data.shift.activeOrdersCount;
+            if (activeOrdersCount > 0) {
+              throw new Error(`previous shift has ${activeOrdersCount} active orders; close or finish non-smoke staging orders manually`);
+            }
+            if (workspace.body.data.shift.canClose) {
+              await request(`/api/v1/dispatcher-shifts/${workspace.body.data.shift.id}/close`, {
+                method: "POST",
+                headers: authHeaders,
+                body: JSON.stringify({ closedByName: "Staging Smoke" }),
+              });
+              workspace = await getWorkspace();
+              summary.push("previous shift closed");
+            } else {
+              throw new Error("previous shift is open but cannot be closed by smoke; inspect staging shift state manually");
+            }
+          }
+
+          if (workspace.body?.data?.shift?.state === "NOT_OPEN") {
+            if (workspace.body.data.shift.canOpen) {
+              await request("/api/v1/dispatcher-shifts/open", {
+                method: "POST",
+                headers: authHeaders,
+                body: JSON.stringify({ responsibleName: "Staging Smoke" }),
+              });
+              workspace = await getWorkspace();
+              summary.push("shift opened by smoke");
+            } else {
+              assert.equal(orderingStatus.body?.data?.acceptingOrders, false, "ordering must be closed before open threshold");
+              const closedOrder = await requestAllowFailure("/api/v1/public/orders", {
+                method: "POST",
+                headers: { cookie: createPublicClientCookie("79009999202") },
+                body: JSON.stringify({
+                  deliveryAddress: "г. Smoke, ул. Test, д. 1",
+                  recipientPhone: "+79009999202",
+                  paymentMethod: "cash",
+                  customerComment: smokeMarker,
+                  items: [{
+                    catalogItemId: data.catalogItemId,
+                    catalogItemVariantId: data.catalogItemVariantId,
+                    quantity: 1,
+                    choices: [],
+                  }],
+                }),
+              });
+              assert.equal(closedOrder.response.status, 409, "public order must be rejected when shift cannot open yet");
+              assert.equal(errorCode(closedOrder), "ORDERING_CLOSED", "closed-hours public order must return ORDERING_CLOSED");
+              summary.push("closed-hours branch ok");
+              console.log("STAGING_SMOKE_OK closed-hours shift gate");
+              await pool.end();
+              process.exit(0);
+            }
+          }
+
+          if (workspace.body?.data?.shift?.state === "CLOSED") {
+            assert.equal(orderingStatus.body?.data?.acceptingOrders, false, "ordering must be closed after today's shift is closed");
+            const rejectedOrder = await requestAllowFailure("/api/v1/public/orders", {
+              method: "POST",
+              headers: { cookie: createPublicClientCookie("79009999202") },
+              body: JSON.stringify({
+                deliveryAddress: "г. Smoke, ул. Test, д. 1",
+                recipientPhone: "+79009999202",
+                paymentMethod: "cash",
+                customerComment: smokeMarker,
+                items: [{
+                  catalogItemId: data.catalogItemId,
+                  catalogItemVariantId: data.catalogItemVariantId,
+                  quantity: 1,
+                  choices: [],
+                }],
+              }),
+            });
+            assert.equal(rejectedOrder.response.status, 409, "public order must be rejected after today's shift is closed");
+            assert.equal(errorCode(rejectedOrder), "ORDERING_CLOSED", "post-close public order must return ORDERING_CLOSED");
+            const history = await request("/api/v1/dispatcher-shifts", { headers: authHeaders });
+            assert.equal(history.response.headers.get("cache-control"), "no-store", "shift history must be no-store");
+            summary.push("closed-day branch ok");
+            console.log(`STAGING_SMOKE_OK closed-day shift gate :: ${summary.join(" | ")}`);
+            await pool.end();
+            process.exit(0);
+          }
+
+          assert.equal(workspace.body?.data?.shift?.state, "OPEN", "shift must be open for full smoke");
+          const leftoverSmokeOrders = await getActiveSmokeOrders(workspace.body.data.shift.id);
+          for (const order of leftoverSmokeOrders) {
+            await completeSmokeOrder(order);
+          }
+          if (leftoverSmokeOrders.length > 0) {
+            workspace = await getWorkspace();
+            summary.push(`completed leftover smoke orders: ${leftoverSmokeOrders.length}`);
+          }
+
+          orderingStatus = await getOrderingStatus();
+          assert.equal(orderingStatus.body?.data?.acceptingOrders, true, "public ordering status must accept orders while shift is open");
+
+          const beforeNewCount = workspace.body.data.counts.new;
+          const publicOrder = await createPublicSmokeOrder();
+          const publicOrderId = publicOrder.body?.data?.id;
+          assert.ok(publicOrderId, "public smoke order was not created");
+          const publicOrderDetail = await request(`/api/v1/orders/${publicOrderId}`, { headers: authHeaders });
+          assert.ok(publicOrderDetail.body?.data?.shiftId, "public smoke order must include shiftId");
+          assert.equal(publicOrderDetail.body?.data?.status, "NEW", "public smoke order must start as NEW");
+          assert.equal(publicOrderDetail.body?.data?.source, "SITE", "public smoke order source must be SITE");
+
+          workspace = await getWorkspace();
+          assert.ok(hasOrder(workspace.body?.data?.orderGroups?.new, publicOrderId), "public smoke order is missing from dispatcher new group");
+          assert.ok(workspace.body.data.counts.new >= beforeNewCount + 1, "new count did not increase");
+
+          const kitchenBefore = await request("/api/v1/orders/kitchen", { headers: authHeaders });
+          assert.equal(hasOrder(kitchenBefore.body?.data, publicOrderId), false, "NEW order must not be visible in kitchen");
+
+          await setOrderStatus(publicOrderId, "SENT_TO_KITCHEN");
+          workspace = await getWorkspace();
+          assert.equal(hasOrder(workspace.body?.data?.orderGroups?.new, publicOrderId), false, "order must leave new group after dispatch");
+          assert.ok(hasOrder(workspace.body?.data?.orderGroups?.inProgress, publicOrderId), "order must enter dispatcher in-progress group");
+          const kitchenAfter = await request("/api/v1/orders/kitchen", { headers: authHeaders });
+          assert.ok(hasOrder(kitchenAfter.body?.data, publicOrderId), "SENT_TO_KITCHEN order must be visible in kitchen");
+
+          await setOrderStatus(publicOrderId, "READY");
+          await setOrderStatus(publicOrderId, "PACKED");
+          await setOrderStatus(publicOrderId, "DELIVERED_PAID");
+
+          workspace = await getWorkspace();
+          assert.ok(hasOrder(workspace.body?.data?.orderGroups?.completed, publicOrderId), "completed smoke order must be in completed group");
+          assert.ok(workspace.body.data.shift.checksCount >= 1, "checks count must update after completion");
+          assert.ok(workspace.body.data.shift.revenueCents > 0, "revenue must update after completion");
+
+          const secondOrder = await createPublicSmokeOrder();
+          const secondOrderId = secondOrder.body?.data?.id;
+          assert.ok(secondOrderId, "second public smoke order was not created");
+          const closeWithActive = await requestAllowFailure(`/api/v1/dispatcher-shifts/${workspace.body.data.shift.id}/close`, {
             method: "POST",
             headers: authHeaders,
-            body: JSON.stringify({
-              clientId: data.clientId,
-              employeeId: data.employeeId,
-              status: "SENT_TO_KITCHEN",
-              source: "PHONE",
-              deliveryFeeCents: 0,
-              isInternal: false,
-              items: [{
-                catalogItemId: data.catalogItemId,
-                catalogItemVariantId: data.catalogItemVariantId,
-                quantity: 1,
-              }],
-            }),
+            body: JSON.stringify({ closedByName: "Staging Smoke" }),
           });
-          assert.ok(order.body?.data?.id, "CRM order was not created");
-          await request(`/api/v1/orders/${order.body.data.id}/status`, {
-            method: "PATCH",
-            headers: authHeaders,
-            body: JSON.stringify({ status: "READY" }),
-          });
+          assert.equal(closeWithActive.response.status, 409, "close must fail with active smoke order");
+          assert.equal(errorCode(closeWithActive), "SHIFT_HAS_ACTIVE_ORDERS", "active-order close must return SHIFT_HAS_ACTIVE_ORDERS");
+          await setOrderStatus(secondOrderId, "SENT_TO_KITCHEN");
+          await setOrderStatus(secondOrderId, "READY");
+          await setOrderStatus(secondOrderId, "PACKED");
+          await setOrderStatus(secondOrderId, "DELIVERED_PAID");
 
-          const workspace = await request("/api/v1/inventory/workspace", { headers: authHeaders });
-          assert.ok(Array.isArray(workspace.body?.data?.products), "inventory workspace has no products array");
+          workspace = await getWorkspace();
+          const remainingSmokeOrders = await getActiveSmokeOrders(workspace.body.data.shift.id);
+          for (const order of remainingSmokeOrders) {
+            await completeSmokeOrder(order);
+          }
+          if (remainingSmokeOrders.length > 0) {
+            workspace = await getWorkspace();
+            summary.push(`completed remaining smoke orders: ${remainingSmokeOrders.length}`);
+          }
+          const closeAttempt = await requestAllowFailure(`/api/v1/dispatcher-shifts/${workspace.body.data.shift.id}/close`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ closedByName: "Staging Smoke" }),
+          });
+          if (workspace.body.data.shift.canClose) {
+            assert.equal(closeAttempt.response.status, 200, "close must succeed when close window is open and no active orders remain");
+            const shiftDetail = await request(`/api/v1/dispatcher-shifts/${workspace.body.data.shift.id}`, { headers: authHeaders });
+            assert.equal(shiftDetail.response.headers.get("cache-control"), "no-store", "shift detail must be no-store");
+            assert.ok(shiftDetail.body?.data?.checksCount >= 2, "closed shift snapshots must keep checks");
+            orderingStatus = await getOrderingStatus();
+            assert.equal(orderingStatus.body?.data?.acceptingOrders, false, "ordering must close after shift close");
+            const rejectedOrder = await requestAllowFailure("/api/v1/public/orders", {
+              method: "POST",
+              headers: { cookie: createPublicClientCookie("79009999202") },
+              body: JSON.stringify({
+                deliveryAddress: "г. Smoke, ул. Test, д. 1",
+                recipientPhone: "+79009999202",
+                paymentMethod: "cash",
+                customerComment: smokeMarker,
+                items: [{
+                  catalogItemId: data.catalogItemId,
+                  catalogItemVariantId: data.catalogItemVariantId,
+                  quantity: 1,
+                  choices: [],
+                }],
+              }),
+            });
+            assert.equal(rejectedOrder.response.status, 409, "public order must be rejected after shift close");
+            assert.equal(errorCode(rejectedOrder), "ORDERING_CLOSED", "post-close public order must return ORDERING_CLOSED");
+            const history = await request("/api/v1/dispatcher-shifts", { headers: authHeaders });
+            assert.equal(history.response.headers.get("cache-control"), "no-store", "shift history must be no-store");
+            assert.ok(Array.isArray(history.body?.data), "shift history must return an array");
+            summary.push("full open-to-close branch ok");
+          } else {
+            assert.equal(closeAttempt.response.status, 409, "close before close threshold must be rejected");
+            assert.equal(errorCode(closeAttempt), "SHIFT_CLOSE_TOO_EARLY", "early close must return SHIFT_CLOSE_TOO_EARLY");
+            summary.push("pre-21:00 completion branch ok");
+          }
+
+          const inventoryWorkspace = await request("/api/v1/inventory/workspace", { headers: authHeaders });
+          assert.ok(Array.isArray(inventoryWorkspace.body?.data?.products), "inventory workspace has no products array");
           const incoming = await request("/api/v1/inventory/incoming-acts", {
             method: "POST",
             headers: authHeaders,
@@ -350,28 +619,24 @@ jobs:
             "public SMS request returned an unreadable response",
           );
 
-          const publicOrder = await request("/api/v1/public/orders", {
-            method: "POST",
-            headers: { cookie: createPublicClientCookie("79009999202") },
-            body: JSON.stringify({
-              deliveryAddress: "г. Smoke, ул. Test, д. 1",
-              recipientPhone: "+79009999202",
-              paymentMethod: "cash",
-              customerComment: "staging smoke",
-              items: [{
-                catalogItemId: data.catalogItemId,
-                catalogItemVariantId: data.catalogItemVariantId,
-                quantity: 1,
-                choices: [],
-              }],
-            }),
-          });
-          assert.ok(publicOrder.body?.data?.id, "public order was not created");
-          await request(`/api/v1/public/orders/${publicOrder.body.data.id}`, {
+          await request(`/api/v1/public/orders/${publicOrderId}`, {
             headers: { cookie: createPublicClientCookie("79009999202") },
           });
 
           await pool.end();
-          console.log("STAGING_SMOKE_OK auth orders inventory public-flow");
+          console.log(`STAGING_SMOKE_OK auth shift inventory public-flow :: ${summary.join(" | ")}`);
           NODE
           REMOTE
+
+      - name: Write sanitized smoke summary
+        if: success()
+        run: |
+          {
+            echo "## Staging smoke"
+            echo ""
+            echo "- Backend health checked"
+            echo "- Role permission contract checked"
+            echo "- Shift-aware public order flow checked"
+            echo "- Dispatcher workspace/kitchen/completion flow checked"
+            echo "- Cache headers checked for shift endpoints"
+          } >> "$GITHUB_STEP_SUMMARY"

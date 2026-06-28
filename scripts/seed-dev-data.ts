@@ -13,12 +13,38 @@ type ProductSeed = {
   description: string;
 };
 
+type EmployeeSeed = {
+  name: string;
+  email: string;
+  role: string;
+  phone: string;
+};
+
 const employees = [
   { name: "Анна Управляющая", email: "admin@foodlike.dev", role: "Управляющий", phone: "+7 900 100-00-01" },
   { name: "Дима Диспетчер", email: "dispatcher@foodlike.dev", role: "Диспетчер", phone: "+7 900 100-00-02" },
   { name: "Полина Повар", email: "cook@foodlike.dev", role: "Повар", phone: "+7 900 100-00-03" },
   { name: "Кирилл Курьер", email: "courier@foodlike.dev", role: "Курьер", phone: "+7 900 100-00-04" },
 ] as const;
+
+function getOptionalSmokeEmployee() {
+  const phone = process.env.LOCAL_SMOKE_PHONE?.trim();
+  const password = process.env.LOCAL_SMOKE_PASSWORD?.trim();
+
+  if (!phone || !password) {
+    return null;
+  }
+
+  return {
+    employee: {
+      name: "Local Smoke User",
+      email: "local-smoke@foodlike.dev",
+      role: "Управляющий",
+      phone,
+    },
+    password,
+  } as const;
+}
 
 const products: ProductSeed[] = [
   {
@@ -61,7 +87,21 @@ async function ensureUser(phone: string, role: string) {
   );
 }
 
-async function ensureEmployee(employee: (typeof employees)[number]) {
+async function ensureUserWithPassword(phone: string, role: string, password: string) {
+  await pool.query(
+    `
+      INSERT INTO "User" ("phone", "password", "role")
+      VALUES ($1, $2, $3)
+      ON CONFLICT ("phone")
+      DO UPDATE SET
+        "password" = EXCLUDED."password",
+        "role" = EXCLUDED."role"
+    `,
+    [phone.replace(/\D/g, ""), hashPassword(password), role],
+  );
+}
+
+async function ensureEmployee(employee: EmployeeSeed) {
   const result = await pool.query<{ id: number }>(
     `
       INSERT INTO "Employee" ("name", "email", "role", "phone", "messenger")
@@ -233,6 +273,12 @@ async function main() {
   for (const employee of employees) {
     await ensureEmployee(employee);
     await ensureUser(employee.phone.replace(/\D/g, ""), employee.role);
+  }
+
+  const smoke = getOptionalSmokeEmployee();
+  if (smoke) {
+    await ensureEmployee(smoke.employee);
+    await ensureUserWithPassword(smoke.employee.phone, smoke.employee.role, smoke.password);
   }
 
   await ensureClient();

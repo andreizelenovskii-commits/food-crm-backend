@@ -139,8 +139,6 @@ export async function createPublicOrder(phone: string, input: PublicOrderInput) 
     throw new ValidationError("Войдите или зарегистрируйтесь перед оформлением заказа");
   }
 
-  await saveDeliveryAddressToClient(client, input.deliveryAddress);
-
   const order = await createOrder({
     clientId: client.id,
     employeeId: await resolvePublicOrderEmployeeId(),
@@ -153,6 +151,8 @@ export async function createPublicOrder(phone: string, input: PublicOrderInput) 
     customerComment: buildPublicOrderComment(input.paymentMethod, input.customerComment),
     items: input.items,
   });
+
+  await saveDeliveryAddressToClient(client, input.deliveryAddress);
 
   return toPublicOrderStatus(order);
 }

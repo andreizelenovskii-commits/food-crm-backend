@@ -10,12 +10,17 @@ import type {
 } from "@backend/modules/orders/orders.types";
 import { calculateOrderPricing } from "@backend/modules/orders/orders.pricing";
 import {
+  BUSINESS_TIME_ZONE,
+  getBusinessDate,
+} from "@backend/modules/dispatcher-shifts/dispatcher-shifts.time";
+import {
   DELIVERY_ITEM_NAME,
   mapRowToOrder,
   type CatalogOrderItemRow,
   type CatalogVariantOrderRow,
   type OrderRow,
 } from "@backend/modules/orders/orders.repository.shared";
+import { ConflictError } from "@backend/shared/errors/app-error";
 
 function getChoiceSlotSelectionCount(quantity: number) {
   return Number.isInteger(quantity) && quantity > 1 ? quantity : 1;
@@ -23,6 +28,30 @@ function getChoiceSlotSelectionCount(quantity: number) {
 
 export async function createOrder(input: OrderCreateInput): Promise<OrderListItem> {
   return withTransaction(async (client) => {
+    const now = new Date();
+    const shiftResult = await client.query<{
+      id: number;
+      businessDate: Date;
+      status: string;
+      timeZone: string;
+    }>(
+      `
+        SELECT "id", "businessDate", "status", "timeZone"
+        FROM "DispatcherShift"
+        WHERE "status" = 'OPEN'
+        ORDER BY "openedAt" ASC
+        LIMIT 1
+        FOR UPDATE
+      `,
+    );
+    const shift = shiftResult.rows[0];
+
+    if (!shift || shift.status !== "OPEN" || getBusinessDate(shift.businessDate, shift.timeZone) !== getBusinessDate(now, BUSINESS_TIME_ZONE)) {
+      throw new ConflictError("Сейчас заказы не принимаются", {
+        code: "ORDERING_CLOSED",
+      });
+    }
+
     const clientExists = await client.query<{
       id: number;
       name: string;
@@ -342,6 +371,7 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
       `
         INSERT INTO "Order" (
           "status",
+          "shiftId",
           "source",
           "isInternal",
           "clientId",
@@ -355,10 +385,11 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           "discountPercent",
           "totalCents"
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING
           "id",
           "status",
+          "shiftId",
           "source",
           "isInternal",
           "customerPhoneSnapshot",
@@ -371,11 +402,12 @@ export async function createOrder(input: OrderCreateInput): Promise<OrderListIte
           "clientId",
           "clientNameSnapshot" AS "clientName",
           "clientTypeSnapshot" AS "clientType",
-          (SELECT e."id" FROM "Employee" e WHERE e."id" = $10) AS "employeeId",
-          (SELECT e."name" FROM "Employee" e WHERE e."id" = $10) AS "employeeName"
+          (SELECT e."id" FROM "Employee" e WHERE e."id" = $11) AS "employeeId",
+          (SELECT e."name" FROM "Employee" e WHERE e."id" = $11) AS "employeeName"
       `,
       [
         input.status,
+        shift.id,
         input.source ?? "ADMIN",
         input.isInternal,
         input.clientId,

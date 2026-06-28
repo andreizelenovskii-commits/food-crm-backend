@@ -11,6 +11,7 @@ import type {
 export type OrderRow = {
   id: number;
   status: string;
+  shiftId: number | null;
   source: string;
   isInternal: boolean;
   clientId: number | null;
@@ -88,6 +89,7 @@ function normalizeDbOrderStatus(status: string): OrderStatus {
       return "READY";
     case "COMPLETED":
       return "DELIVERED_PAID";
+    case "NEW":
     case "SENT_TO_KITCHEN":
     case "READY":
     case "PACKED":
@@ -114,6 +116,7 @@ export function mapRowToOrder(row: OrderRow): OrderListItem {
   return {
     id: row.id,
     status: normalizeDbOrderStatus(row.status),
+    shiftId: row.shiftId,
     source: normalizeOrderSource(row.source),
     isInternal: row.isInternal,
     clientId: row.clientId,
