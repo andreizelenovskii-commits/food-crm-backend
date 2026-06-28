@@ -13,11 +13,17 @@ import {
 } from "@backend/modules/sales-analytics/sales-analytics.repository";
 import {
   createManagementAccountingManualEntry,
+  closeManagementAccountingDay,
   deleteManagementAccountingManualEntry,
   getDailyEmployeeRows,
+  getManagementAccountingDay,
+  getManagementAccountingManualEntry,
   getManagementAccountingManualEntries,
+  isManagementAccountingDayEditable,
+  startManagementAccountingDay,
   updateManagementAccountingManualEntry,
 } from "@backend/modules/management-accounting/management-accounting.repository";
+import { ValidationError } from "@backend/shared/errors/app-error";
 import type {
   ManagementAccountingDto,
   ManagementAccountingManualEntry,
@@ -131,6 +137,10 @@ export async function addManagementAccountingManualEntry(
   input: ManagementAccountingManualEntryInput,
   user: AuthenticatedApiUser,
 ) {
+  if (!await isManagementAccountingDayEditable(input.date)) {
+    throw new ValidationError("Сначала начните управленческий учет за смену");
+  }
+
   return createManagementAccountingManualEntry({
     ...input,
     createdByUserId: user.id,
@@ -141,8 +151,13 @@ export async function editManagementAccountingManualEntry(
   entryId: number,
   input: ManagementAccountingManualEntryInput,
 ) {
+  if (!await isManagementAccountingDayEditable(input.date)) {
+    throw new ValidationError("Закрытый управленческий учет нельзя менять");
+  }
+
   return updateManagementAccountingManualEntry({
     entryId,
+    date: input.date,
     type: input.type,
     category: input.category,
     amountCents: input.amountCents,
@@ -151,7 +166,49 @@ export async function editManagementAccountingManualEntry(
 }
 
 export async function removeManagementAccountingManualEntry(entryId: number) {
+  const entry = await getManagementAccountingManualEntry(entryId);
+
+  if (!entry) {
+    return false;
+  }
+
+  if (!await isManagementAccountingDayEditable(entry.date)) {
+    throw new ValidationError("Закрытый управленческий учет нельзя менять");
+  }
+
   return deleteManagementAccountingManualEntry(entryId);
+}
+
+export async function startDailyManagementAccounting(input: {
+  date: string;
+  user: AuthenticatedApiUser;
+}) {
+  const current = await getManagementAccountingDay(input.date);
+
+  if (current.status === "CLOSED") {
+    throw new ValidationError("Управленческий учет за эту смену уже закрыт");
+  }
+
+  return startManagementAccountingDay({
+    date: input.date,
+    userId: input.user.id,
+  });
+}
+
+export async function closeDailyManagementAccounting(input: {
+  date: string;
+  user: AuthenticatedApiUser;
+}) {
+  const closed = await closeManagementAccountingDay({
+    date: input.date,
+    userId: input.user.id,
+  });
+
+  if (!closed) {
+    throw new ValidationError("Сначала начните управленческий учет за смену");
+  }
+
+  return closed;
 }
 
 export async function getManagementAccounting({
@@ -167,7 +224,7 @@ export async function getManagementAccounting({
     inventory: hasApiPermission(user, "view_inventory"),
     manualOperations: hasApiPermission(user, "view_dashboard"),
   };
-  const [data, manualEntries, employeeRows, shift] = await Promise.all([
+  const [data, manualEntries, employeeRows, shift, accountingDay] = await Promise.all([
     getSalesAnalyticsRepositoryData({
       start: range.start,
       end: range.end,
@@ -176,6 +233,7 @@ export async function getManagementAccounting({
     getManagementAccountingManualEntries(range.date),
     getDailyEmployeeRows({ start: range.start, end: range.end }),
     getShiftByBusinessDate(range.date),
+    getManagementAccountingDay(range.date),
   ]);
   const staffMembers = buildStaffMembers(employeeRows, range.date);
   const staffTotals = staffMembers.reduce(
@@ -275,6 +333,7 @@ export async function getManagementAccounting({
 
   return {
     range,
+    accountingDay,
     previousHref: buildManagementHref(range.previousDate),
     nextHref: buildManagementHref(range.nextDate),
     kpis,

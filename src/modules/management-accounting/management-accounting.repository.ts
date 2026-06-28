@@ -2,6 +2,7 @@ import { pool } from "@backend/shared/db/pool";
 import { ensureRecentDatabaseBackup } from "@backend/shared/db/backup";
 import { BUSINESS_TIME_ZONE, getBusinessDateUtc, toBusinessDate } from "@backend/modules/dispatcher-shifts/dispatcher-shifts.time";
 import type {
+  ManagementAccountingDay,
   ManagementAccountingEntryType,
   ManagementAccountingManualEntry,
 } from "@backend/modules/management-accounting/management-accounting.types";
@@ -17,6 +18,14 @@ type ManualEntryRow = {
   updatedAt: Date;
 };
 
+type AccountingDayRow = {
+  id: number;
+  businessDate: Date;
+  status: "OPEN" | "CLOSED";
+  openedAt: Date;
+  closedAt: Date | null;
+};
+
 export type DailyEmployeeRow = {
   employeeId: number;
   name: string;
@@ -28,6 +37,32 @@ export type DailyEmployeeRow = {
   finesCents: string | null;
   debtCents: string | null;
 };
+
+function mapAccountingDay(row: AccountingDayRow | null | undefined, date: string): ManagementAccountingDay {
+  if (!row) {
+    return {
+      id: null,
+      date,
+      status: "NOT_STARTED",
+      openedAt: null,
+      closedAt: null,
+      canStart: true,
+      canEdit: false,
+      canClose: false,
+    };
+  }
+
+  return {
+    id: row.id,
+    date: toBusinessDate(row.businessDate, BUSINESS_TIME_ZONE),
+    status: row.status,
+    openedAt: row.openedAt.toISOString(),
+    closedAt: row.closedAt?.toISOString() ?? null,
+    canStart: false,
+    canEdit: row.status === "OPEN",
+    canClose: row.status === "OPEN",
+  };
+}
 
 function mapManualEntry(row: ManualEntryRow): ManagementAccountingManualEntry {
   return {
@@ -41,6 +76,78 @@ function mapManualEntry(row: ManualEntryRow): ManagementAccountingManualEntry {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+export async function getManagementAccountingDay(date: string) {
+  const result = await pool.query<AccountingDayRow>(
+    `
+      SELECT "id", "businessDate", "status", "openedAt", "closedAt"
+      FROM "ManagementAccountingDay"
+      WHERE "businessDate" = $1
+      LIMIT 1
+    `,
+    [getBusinessDateUtc(date, BUSINESS_TIME_ZONE)],
+  );
+
+  return mapAccountingDay(result.rows[0], date);
+}
+
+export async function startManagementAccountingDay(input: {
+  date: string;
+  userId: number;
+}) {
+  await ensureRecentDatabaseBackup("management-accounting-day-start");
+  const result = await pool.query<AccountingDayRow>(
+    `
+      INSERT INTO "ManagementAccountingDay" (
+        "businessDate",
+        "status",
+        "openedByUserId",
+        "openedAt"
+      )
+      VALUES ($1, 'OPEN', $2, NOW())
+      ON CONFLICT ("businessDate") DO UPDATE
+      SET
+        "status" = CASE
+          WHEN "ManagementAccountingDay"."status" = 'OPEN' THEN 'OPEN'::"ManagementAccountingDayStatus"
+          ELSE "ManagementAccountingDay"."status"
+        END,
+        "updatedAt" = NOW()
+      RETURNING "id", "businessDate", "status", "openedAt", "closedAt"
+    `,
+    [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId],
+  );
+
+  return mapAccountingDay(result.rows[0], input.date);
+}
+
+export async function closeManagementAccountingDay(input: {
+  date: string;
+  userId: number;
+}) {
+  await ensureRecentDatabaseBackup("management-accounting-day-close");
+  const result = await pool.query<AccountingDayRow>(
+    `
+      UPDATE "ManagementAccountingDay"
+      SET
+        "status" = 'CLOSED',
+        "closedByUserId" = $2,
+        "closedAt" = NOW(),
+        "updatedAt" = NOW()
+      WHERE "businessDate" = $1
+        AND "status" = 'OPEN'
+      RETURNING "id", "businessDate", "status", "openedAt", "closedAt"
+    `,
+    [getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE), input.userId],
+  );
+
+  return result.rows[0] ? mapAccountingDay(result.rows[0], input.date) : null;
+}
+
+export async function isManagementAccountingDayEditable(date: string) {
+  const day = await getManagementAccountingDay(date);
+
+  return day.status === "OPEN";
 }
 
 export async function getManagementAccountingManualEntries(date: string) {
@@ -63,6 +170,28 @@ export async function getManagementAccountingManualEntries(date: string) {
   );
 
   return result.rows.map(mapManualEntry);
+}
+
+export async function getManagementAccountingManualEntry(entryId: number) {
+  const result = await pool.query<ManualEntryRow>(
+    `
+      SELECT
+        "id",
+        "businessDate",
+        "type",
+        "category",
+        "amountCents",
+        "comment",
+        "createdAt",
+        "updatedAt"
+      FROM "ManagementAccountingEntry"
+      WHERE "id" = $1
+      LIMIT 1
+    `,
+    [entryId],
+  );
+
+  return result.rows[0] ? mapManualEntry(result.rows[0]) : null;
 }
 
 export async function createManagementAccountingManualEntry(input: {
@@ -110,6 +239,7 @@ export async function createManagementAccountingManualEntry(input: {
 
 export async function updateManagementAccountingManualEntry(input: {
   entryId: number;
+  date: string;
   type: ManagementAccountingEntryType;
   category: string;
   amountCents: number;
@@ -126,6 +256,7 @@ export async function updateManagementAccountingManualEntry(input: {
         "comment" = $5,
         "updatedAt" = NOW()
       WHERE "id" = $1
+        AND "businessDate" = $6
       RETURNING
         "id",
         "businessDate",
@@ -136,7 +267,14 @@ export async function updateManagementAccountingManualEntry(input: {
         "createdAt",
         "updatedAt"
     `,
-    [input.entryId, input.type, input.category, input.amountCents, input.comment],
+    [
+      input.entryId,
+      input.type,
+      input.category,
+      input.amountCents,
+      input.comment,
+      getBusinessDateUtc(input.date, BUSINESS_TIME_ZONE),
+    ],
   );
 
   return result.rows[0] ? mapManualEntry(result.rows[0]) : null;

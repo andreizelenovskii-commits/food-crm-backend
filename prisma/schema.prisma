@@ -168,6 +168,11 @@ enum ManagementAccountingEntryType {
   EXPENSE
 }
 
+enum ManagementAccountingDayStatus {
+  OPEN
+  CLOSED
+}
+
 model EmployeeAdjustment {
   id         Int                     @id @default(autoincrement())
   employee   Employee                @relation(fields: [employeeId], references: [id])
@@ -191,6 +196,21 @@ model ManagementAccountingEntry {
 
   @@index([businessDate])
   @@index([businessDate, type])
+}
+
+model ManagementAccountingDay {
+  id              Int                           @id @default(autoincrement())
+  businessDate    DateTime                      @unique
+  status          ManagementAccountingDayStatus
+  openedByUserId  Int?
+  openedAt        DateTime                      @default(now())
+  closedByUserId  Int?
+  closedAt        DateTime?
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
+
+  @@index([status])
+  @@index([businessDate, status])
 }
 
 model Order {

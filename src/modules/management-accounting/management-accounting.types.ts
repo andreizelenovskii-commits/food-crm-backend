@@ -6,6 +6,7 @@ export type ManagementAccountingMetric = {
 };
 
 export type ManagementAccountingEntryType = "INCOME" | "EXPENSE";
+export type ManagementAccountingDayStatus = "NOT_STARTED" | "OPEN" | "CLOSED";
 
 export type ManagementAccountingManualEntry = {
   id: number;
@@ -42,8 +43,20 @@ export type ManagementAccountingRange = {
   nextDate: string;
 };
 
+export type ManagementAccountingDay = {
+  id: number | null;
+  date: string;
+  status: ManagementAccountingDayStatus;
+  openedAt: string | null;
+  closedAt: string | null;
+  canStart: boolean;
+  canEdit: boolean;
+  canClose: boolean;
+};
+
 export type ManagementAccountingDto = {
   range: ManagementAccountingRange;
+  accountingDay: ManagementAccountingDay;
   previousHref: string;
   nextHref: string;
   kpis: ManagementAccountingMetric[];

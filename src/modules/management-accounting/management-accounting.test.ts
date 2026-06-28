@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  parseManagementAccountingDayActionInput,
   parseManagementAccountingManualEntryInput,
   parseManagementAccountingQuery,
 } from "@backend/modules/management-accounting/management-accounting.validation";
@@ -31,6 +32,12 @@ test("management accounting manual entry input normalizes amount", () => {
     category: "Бензин",
     amountCents: 125050,
     comment: "Курьеры",
+  });
+});
+
+test("management accounting day action input accepts daily date", () => {
+  assert.deepEqual(parseManagementAccountingDayActionInput({ date: "2026-06-28" }), {
+    date: "2026-06-28",
   });
 });
 

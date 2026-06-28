@@ -3,11 +3,14 @@ import { requirePermission } from "@backend/modules/auth/auth-context";
 import { getNumericParam, getRequestBody } from "@backend/lib/request";
 import {
   addManagementAccountingManualEntry,
+  closeDailyManagementAccounting,
   editManagementAccountingManualEntry,
   getManagementAccounting,
   removeManagementAccountingManualEntry,
+  startDailyManagementAccounting,
 } from "@backend/modules/management-accounting/management-accounting.service";
 import {
+  parseManagementAccountingDayActionInput,
   parseManagementAccountingManualEntryInput,
   parseManagementAccountingQuery,
 } from "@backend/modules/management-accounting/management-accounting.validation";
@@ -28,6 +31,48 @@ export async function registerManagementAccountingRoutes(app: FastifyInstance) {
       });
 
       return { data };
+    },
+  );
+
+  app.post(
+    "/api/v1/analytics/management/day/start",
+    { preHandler: requireDashboard },
+    async (request) => {
+      const input = parseManagementAccountingDayActionInput(getRequestBody(request));
+      const day = await startDailyManagementAccounting({
+        ...input,
+        user: request.authUser!,
+      });
+      await writeAuditLog({
+        request,
+        action: "management_accounting.day.start",
+        entityType: "management_accounting_day",
+        entityId: day.id ? String(day.id) : undefined,
+        after: day,
+      });
+
+      return { data: day };
+    },
+  );
+
+  app.post(
+    "/api/v1/analytics/management/day/close",
+    { preHandler: requireDashboard },
+    async (request) => {
+      const input = parseManagementAccountingDayActionInput(getRequestBody(request));
+      const day = await closeDailyManagementAccounting({
+        ...input,
+        user: request.authUser!,
+      });
+      await writeAuditLog({
+        request,
+        action: "management_accounting.day.close",
+        entityType: "management_accounting_day",
+        entityId: day.id ? String(day.id) : undefined,
+        after: day,
+      });
+
+      return { data: day };
     },
   );
 

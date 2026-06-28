@@ -5,6 +5,10 @@ export type ManagementAccountingQuery = {
   date?: string;
 };
 
+export type ManagementAccountingDayActionInput = {
+  date: string;
+};
+
 export type ManagementAccountingManualEntryInput = {
   date: string;
   type: ManagementAccountingEntryType;
@@ -75,6 +79,16 @@ export function parseManagementAccountingQuery(query: unknown): ManagementAccoun
   }
 
   return { date };
+}
+
+export function parseManagementAccountingDayActionInput(payload: unknown): ManagementAccountingDayActionInput {
+  const source = payload && typeof payload === "object"
+    ? payload as Record<string, unknown>
+    : {};
+
+  return {
+    date: parseDate(source.date),
+  };
 }
 
 export function parseManagementAccountingManualEntryInput(
